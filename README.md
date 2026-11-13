@@ -53,6 +53,9 @@ tests on Python 3.12, 3.13 and 3.14; the project requires Python 3.12+. The defa
 
 ## How to use this repo
 
+> **Practical guide:** [`HOW_TO_USE_THIS_REPO.md`](HOW_TO_USE_THIS_REPO.md) covers setup, the per-lesson
+> workflow, study paths, running the apps, the checks, and troubleshooting. The notes below are the short version.
+
 - **Lessons 01-12 and 16-18 are single Python files.** The explanation is in the docstring, the code runs, and
   most have exercises at the bottom. Read the docstring, run it, change something, break it.
 - **Lessons 13-15, 19 and 20 are bigger.** 13 is the official tutorial as one file; 14, 15 and 20 are a
@@ -1382,6 +1385,7 @@ and `Command[Literal[...]]` patterns are not yet understood by `ty`, so those li
 
 ## Companion documents
 
+- [`HOW_TO_USE_THIS_REPO.md`](HOW_TO_USE_THIS_REPO.md): the operating manual: setup, workflow, study paths, running the apps, troubleshooting.
 - [`INTERVIEW.md`](INTERVIEW.md): 34 questions and answers with lesson pointers, plus whiteboard drills.
 - [`PRODUCTION_CHECKLIST.md`](PRODUCTION_CHECKLIST.md): what is done and what remains before shipping.
 - [`docs/real-models.md`](docs/real-models.md): what changes when you leave the offline fakes.
