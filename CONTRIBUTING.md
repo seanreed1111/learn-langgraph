@@ -21,7 +21,7 @@ available as scripts (they build an isolated env from the `dev` extra):
 | everything CI runs | | `hatch run check` |
 | real-model smoke tests (opt-in) | `pytest -q -m live` | `hatch run live` |
 
-CI (`.github/workflows/ci.yml`) runs lint, types and tests with coverage on Python 3.12, 3.13 and 3.14.
+CI (`.github/workflows/ci.yml`) is currently a deliberate no-op; run `hatch run check` locally (lint, types, tests with coverage). The full workflow is in git history (commit `c9f759d`).
 
 ## Type checking: `ty`, strictest settings, no mypy
 

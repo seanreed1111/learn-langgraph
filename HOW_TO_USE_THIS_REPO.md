@@ -178,7 +178,7 @@ pytest -q -m live                  # OPT-IN: calls a real model, needs a key, co
 ```
 
 With [Hatch](https://hatch.pypa.io) installed, `hatch run check` runs lint, types and tests with coverage, and is
-what CI runs on Python 3.12, 3.13 and 3.14. Offline tests never touch the network, even if you have keys in `.env`.
+the full local gate (the GitHub CI workflow is currently a no-op). Offline tests never touch the network, even if you have keys in `.env`.
 
 ## Making changes safely
 
