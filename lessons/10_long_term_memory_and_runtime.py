@@ -21,13 +21,12 @@ InMemoryStore is for dev. In production use the Postgres store (or the LangSmith
 
 Run:  python lessons/10_long_term_memory_and_runtime.py
 """
-
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage
-from typing_extensions import TypedDict
-
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.runtime import Runtime
@@ -39,21 +38,21 @@ class Context:
     user_id: str
 
 
-def remember_and_reply(state: MessagesState, runtime: Runtime[Context]) -> dict:
+def remember_and_reply(state: MessagesState, runtime: Runtime[Context]) -> dict[str, Any]:
     user_id = runtime.context.user_id
     namespace = ("memories", user_id)  # scoped per user
     text = state["messages"][-1].content
 
     # WRITE: naive rule - store anything the user states as "I like X".
-    if text.lower().startswith("i like "):
-        runtime.store.put(namespace, str(uuid.uuid4()), {"fact": text})
+    if text.lower().startswith("i like "):  # ty: ignore[missing-union-attribute]
+        runtime.store.put(namespace, str(uuid.uuid4()), {"fact": text})  # ty: ignore[missing-union-attribute]
 
     # READ: fetch everything we know about this user (search w/o query lists the namespace).
-    facts = [item.value["fact"] for item in runtime.store.search(namespace)]
+    facts = [item.value["fact"] for item in runtime.store.search(namespace)]  # ty: ignore[missing-union-attribute]
     return {"messages": [AIMessage(content=f"[{user_id}] known facts: {facts}")]}
 
 
-b = StateGraph(MessagesState, context_schema=Context)
+b = StateGraph(MessagesState, context_schema=Context)  # ty: ignore[invalid-argument-type]
 b.add_node("remember_and_reply", remember_and_reply)
 b.add_edge(START, "remember_and_reply")
 b.add_edge("remember_and_reply", END)
@@ -65,16 +64,16 @@ if __name__ == "__main__":
     ada = Context(user_id="ada")
 
     # Thread 1: user tells us something.
-    t1 = {"configurable": {"thread_id": "t1"}}
+    t1: RunnableConfig = {"configurable": {"thread_id": "t1"}}
     graph.invoke({"messages": [HumanMessage("I like Python")]}, t1, context=ada)
 
     # Thread 2: a BRAND NEW conversation (no shared short-term state)...
-    t2 = {"configurable": {"thread_id": "t2"}}
+    t2: RunnableConfig = {"configurable": {"thread_id": "t2"}}
     out = graph.invoke({"messages": [HumanMessage("what do you know about me?")]}, t2, context=ada)
     print(out["messages"][-1].content)  # ...but long-term memory still knows!
 
     # Another user is isolated by namespace.
-    t3 = {"configurable": {"thread_id": "t3"}}
+    t3: RunnableConfig = {"configurable": {"thread_id": "t3"}}
     out = graph.invoke({"messages": [HumanMessage("hello")]}, t3, context=Context("grace"))
     print(out["messages"][-1].content)
 

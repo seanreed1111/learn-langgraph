@@ -8,13 +8,25 @@ from __future__ import annotations
 
 import re
 import sys
+from typing import override
 
 from westeros_rag.config import ROOT
 
 sys.path.insert(0, str(ROOT / "lessons"))
-from offline_llm import (  # noqa: E402
-    GREETING, STOP, THESAURUS, OfflineChatModel, _between, _context_from, _prompt, _question_from, _strip_md,
-    _Structured, expand, stem, words,
+from offline_llm import (
+    GREETING,
+    STOP,
+    THESAURUS,
+    OfflineChatModel,
+    _between,
+    _context_from,
+    _prompt,
+    _question_from,
+    _strip_md,
+    _Structured,
+    expand,
+    stem,
+    words,
 )
 
 # theme -> keywords (used for BOTH section tagging and query theme detection in offline mode)
@@ -125,7 +137,8 @@ def _sentences(text: str) -> list[str]:
 
 
 class _LawStructured(_Structured):
-    def invoke(self, messages, *a, **k):  # noqa: ANN001
+    @override
+    def invoke(self, messages, *a, **k):
         p = _prompt(messages)
         name = self.schema.__name__
         if name == "SectionMeta":
@@ -165,7 +178,7 @@ class _LawStructured(_Structured):
         sentences = [(int(pid), s) for pid, _h, t in passages for s in _sentences(t)]
         heading_of = {int(pid): h for pid, h, _t in passages}
         df: dict[str, int] = {}  # PASSAGE-level rarity: in how many passages does the word occur (text or heading)?
-        for pid, h, t in passages:
+        for _pid, h, t in passages:
             for w in set(lw(t)) | set(lw(h)):
                 df[w] = df.get(w, 0) + 1
 
@@ -200,8 +213,10 @@ class _LawStructured(_Structured):
 
 
 class OfflineLawModel(OfflineChatModel):
-    def with_structured_output(self, schema, **kwargs):  # noqa: ANN001
+    @override
+    def with_structured_output(self, schema, **kwargs):
         return _LawStructured(schema)
 
-    def bind_tools(self, tools, **kwargs):  # noqa: ANN001
+    @override
+    def bind_tools(self, tools, **kwargs):
         return OfflineLawModel()

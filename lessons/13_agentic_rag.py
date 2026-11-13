@@ -52,14 +52,13 @@ from langchain_core.messages import HumanMessage, convert_to_messages
 from langchain_core.tools import tool
 from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pydantic import BaseModel, Field
-
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
+from pydantic import BaseModel, Field
 
 sys.path.insert(0, str(Path(__file__).parent))
-from common import DEFAULT_MODEL, banner, have_real_llm  # noqa: E402
-from offline_llm import HashingEmbeddings, OfflineChatModel  # noqa: E402
+from common import banner, have_real_llm, make_real_chat_model
+from offline_llm import HashingEmbeddings, OfflineChatModel
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "blog"
 
@@ -67,14 +66,12 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "blog"
 # =============================================================== 1. models
 def make_chat_model():
     if have_real_llm():
-        from langchain.chat_models import init_chat_model
-
-        return init_chat_model(os.getenv("LG_MODEL", DEFAULT_MODEL), temperature=0)
+        return make_real_chat_model()
     return OfflineChatModel()
 
 
 def make_embeddings():
-    if os.getenv("OPENAI_API_KEY"):
+    if bool(os.getenv("OPENAI_API_KEY")):
         try:
             from langchain_openai import OpenAIEmbeddings  # pip install langchain-openai
 
@@ -137,7 +134,7 @@ def retrieve_blog_posts(query: str) -> str:
     """Search and return information about Lilian Weng blog posts."""
     # The docstring above is what the LLM reads to decide WHEN to call this tool.
     docs = _get_retriever().invoke(query)
-    return "\n\n".join(d.page_content for d in docs)
+    return "\n\n".join(str(d.page_content) for d in docs)
 
 
 retriever_tool = retrieve_blog_posts
@@ -175,13 +172,13 @@ MAX_REWRITES = 2  # DEVIATION: the docs have no cap
 
 
 def original_question(state: MessagesState) -> str:
-    return state["messages"][0].content
+    return state["messages"][0].content  # ty: ignore[invalid-explicit-return]
 
 
 def current_question(state: MessagesState) -> str:
     # DEVIATION: after a rewrite, the newest HumanMessage is the question we actually searched with.
     humans = [m for m in state["messages"] if getattr(m, "type", "") == "human"]
-    return humans[-1].content
+    return humans[-1].content  # ty: ignore[invalid-explicit-return]
 
 
 def grade_documents(state: MessagesState) -> Literal["generate_answer", "rewrite_question"]:
@@ -247,7 +244,7 @@ def route_on_tool_calls(state: MessagesState):
     return END
 
 
-workflow = StateGraph(MessagesState)
+workflow = StateGraph(MessagesState)  # ty: ignore[invalid-argument-type]
 workflow.add_node(generate_query_or_respond)
 workflow.add_node("retrieve", ToolNode([retriever_tool]))
 workflow.add_node(rewrite_question)
@@ -287,9 +284,9 @@ def unit_tests() -> None:
     banner("node-level tests")
     print("retriever_tool ->", retriever_tool.invoke({"query": "types of reward hacking"})[:90].replace("\n", " "), "...")
 
-    greet = generate_query_or_respond({"messages": [{"role": "user", "content": "hello!"}]})["messages"][-1]
+    greet = generate_query_or_respond({"messages": [{"role": "user", "content": "hello!"}]})["messages"][-1]  # ty: ignore[invalid-argument-type]
     print("greeting makes tool call? ->", bool(greet.tool_calls), "(want False)")
-    ask = generate_query_or_respond({"messages": [{"role": "user", "content": "types of reward hacking?"}]})["messages"][-1]
+    ask = generate_query_or_respond({"messages": [{"role": "user", "content": "types of reward hacking?"}]})["messages"][-1]  # ty: ignore[invalid-argument-type]
     print("question makes tool call? ->", bool(ask.tool_calls), "(want True)")
 
     def convo(tool_text: str):
@@ -304,12 +301,12 @@ def unit_tests() -> None:
             )
         }
 
-    print("grade('meow')     ->", grade_documents(convo("meow")), "(want rewrite_question)")
-    print("grade(relevant)   ->", grade_documents(convo(
+    print("grade('meow')     ->", grade_documents(convo("meow")), "(want rewrite_question)")  # ty: ignore[invalid-argument-type]
+    print("grade(relevant)   ->", grade_documents(convo(  # ty: ignore[invalid-argument-type]
         "reward hacking can be categorized into two types: environment or goal misspecification, and reward tampering"
     )), "(want generate_answer)")
-    print("rewrite           ->", rewrite_question(convo("meow"))["messages"][-1].content)
-    print("answer            ->", generate_answer(convo(
+    print("rewrite           ->", rewrite_question(convo("meow"))["messages"][-1].content)  # ty: ignore[invalid-argument-type]
+    print("answer            ->", generate_answer(convo(  # ty: ignore[invalid-argument-type]
         "reward hacking can be categorized into two types: environment or goal misspecification, and reward tampering"
     ))["messages"][-1].content)
 

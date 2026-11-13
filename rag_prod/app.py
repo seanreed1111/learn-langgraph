@@ -7,7 +7,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from rag_prod.config import Settings
 from rag_prod.graph import RagContext, build_graph
-from rag_prod.ingest import Index, SyncStats
+from rag_prod.ingest import Index
 from rag_prod.llm import get_chat_model, get_embeddings
 from rag_prod.retrieval import HybridRetriever
 

@@ -22,6 +22,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from rag_prod.app import USERS
 
@@ -43,7 +44,7 @@ class CaseResult:
     abstain_correct: bool | None = None
 
 
-def run_case(graph, case: dict) -> CaseResult:
+def run_case(graph, case: dict[str, Any]) -> CaseResult:
     t0 = time.perf_counter()
     out = graph.invoke(
         {"messages": [{"role": "user", "content": case["question"]}]},
@@ -82,7 +83,7 @@ def run_case(graph, case: dict) -> CaseResult:
     return res
 
 
-def summarize(results: list[CaseResult]) -> dict:
+def summarize(results: list[CaseResult]) -> dict[str, Any]:
     def rate(values: list[bool | None]) -> float:
         vals = [v for v in values if v is not None]
         return sum(vals) / len(vals) if vals else 1.0
@@ -98,13 +99,13 @@ def summarize(results: list[CaseResult]) -> dict:
     }
 
 
-def run_all(graph) -> tuple[list[CaseResult], dict]:
+def run_all(graph) -> tuple[list[CaseResult], dict[str, Any]]:
     results = [run_case(graph, c) for c in json.loads(DATASET.read_text(encoding="utf-8"))]
     return results, summarize(results)
 
 
-def thresholds_ok(summary: dict) -> bool:
-    return (
+def thresholds_ok(summary: dict[str, Any]) -> bool:
+    return bool(
         summary["citation_hit_rate"] >= THRESHOLDS["citation_hit_rate"]
         and summary["contains_rate"] >= THRESHOLDS["contains_rate"]
         and summary["abstain_accuracy"] >= THRESHOLDS["abstain_accuracy"]

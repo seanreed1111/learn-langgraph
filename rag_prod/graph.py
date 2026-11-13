@@ -31,17 +31,16 @@ context; retries on transient errors; per-node timing; narrow input/output schem
 
 import operator  # noqa: F401  (kept for readers extending state with reducers)
 from dataclasses import dataclass
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, AnyMessage
-from pydantic import BaseModel, Field
-from typing_extensions import TypedDict
-
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.runtime import Runtime
 from langgraph.types import Command, RetryPolicy
+from pydantic import BaseModel, Field
+from typing_extensions import TypedDict
 
 from rag_prod.config import Settings
 from rag_prod.observability import timed
@@ -66,7 +65,7 @@ class RagState(TypedDict, total=False):
     generations: int
     documents: list[Document]
     answer: str
-    citations: list[dict]
+    citations: list[dict[str, Any]]
     grounded: bool
     status: str  # answered | abstained | rejected | chitchat
     trace: list[str]  # node path taken - invaluable when debugging
@@ -78,7 +77,7 @@ class RagInput(TypedDict):
 
 class RagOutput(TypedDict, total=False):
     answer: str
-    citations: list[dict]
+    citations: list[dict[str, Any]]
     status: str
     rewrites: int
     trace: list[str]
@@ -186,17 +185,17 @@ def build_graph(settings: Settings, model, retriever: HybridRetriever, checkpoin
         fresh = {"rewrites": 0, "generations": 0, "documents": [], "answer": "", "citations": [],
                  "grounded": False, "status": "", "trace": ["guard_input"], "query": ""}
         if not text:
-            return Command(update={**fresh, "answer": "Please enter a question."}, goto="reject")
+            return Command(update={**fresh, "answer": "Please enter a question."}, goto="reject")  # ty: ignore[invalid-explicit-return]
         if len(text) > settings.max_question_chars:
-            return Command(update={**fresh, "answer": f"Question is too long (max {settings.max_question_chars} characters)."}, goto="reject")
-        return Command(update={**fresh, "question": text}, goto="condense")
+            return Command(update={**fresh, "answer": f"Question is too long (max {settings.max_question_chars} characters)."}, goto="reject")  # ty: ignore[invalid-explicit-return]
+        return Command(update={**fresh, "question": text}, goto="condense")  # ty: ignore[invalid-explicit-return]
 
     @timed("reject")
-    def reject(state: RagState) -> dict:
+    def reject(state: RagState) -> dict[str, Any]:
         return {"status": "rejected", "trace": _t(state, "reject"), "messages": [AIMessage(state["answer"])]}
 
     @timed("condense")
-    def condense(state: RagState) -> dict:
+    def condense(state: RagState) -> dict[str, Any]:
         history = state["messages"][:-1][-6:]
         question = state["question"]
         if history:  # follow-up turn: resolve "and what about the second one?" using history
@@ -207,24 +206,24 @@ def build_graph(settings: Settings, model, retriever: HybridRetriever, checkpoin
     @timed("route")
     def route(state: RagState) -> Command[Literal["retrieve", "chitchat"]]:
         decision = route_llm.invoke([{"role": "user", "content": ROUTE_PROMPT.format(question=state["question"])}])
-        return Command(update={"trace": _t(state, "route")}, goto=decision.route)
+        return Command(update={"trace": _t(state, "route")}, goto=decision.route)  # ty: ignore[invalid-explicit-return]
 
     @timed("chitchat")
-    def chitchat(state: RagState) -> dict:
+    def chitchat(state: RagState) -> dict[str, Any]:
         reply = _text(model.invoke(state["messages"]))
         return {"answer": reply, "status": "chitchat", "trace": _t(state, "chitchat"), "messages": [AIMessage(reply)]}
 
     @timed("retrieve")
-    def retrieve(state: RagState, runtime: Runtime[RagContext]) -> dict:
+    def retrieve(state: RagState, runtime: Runtime[RagContext]) -> dict[str, Any]:
         docs = retriever.search(state["query"], frozenset(runtime.context.access_levels))  # ACL enforced HERE
         return {"documents": docs, "trace": _t(state, "retrieve")}
 
     @timed("grade_documents")
-    def grade_documents(state: RagState) -> dict:
+    def grade_documents(state: RagState) -> dict[str, Any]:
         docs = state["documents"]
         prompts = [[{"role": "user", "content": GRADE_PROMPT.format(question=state["question"], context=d.page_content)}] for d in docs]
         grades = grade_llm.batch(prompts, config={"max_concurrency": 4}) if prompts else []
-        keep = [d for d, g in zip(docs, grades) if g.binary_score == "yes"]
+        keep = [d for d, g in zip(docs, grades, strict=True) if g.binary_score == "yes"]
         return {"documents": keep, "trace": _t(state, f"grade({len(keep)}/{len(docs)})")}
 
     def after_grade(state: RagState) -> Literal["generate", "rewrite_query", "abstain"]:
@@ -233,14 +232,14 @@ def build_graph(settings: Settings, model, retriever: HybridRetriever, checkpoin
         return "rewrite_query" if state["rewrites"] < settings.max_rewrites else "abstain"
 
     @timed("rewrite_query")
-    def rewrite_query(state: RagState) -> dict:
+    def rewrite_query(state: RagState) -> dict[str, Any]:
         new_query = _text(model.invoke([{"role": "user", "content": REWRITE_PROMPT.format(question=state["question"], query=state["query"])}])).strip()
         return {"query": new_query or state["query"], "rewrites": state["rewrites"] + 1, "trace": _t(state, "rewrite_query")}
 
     @timed("generate")
-    def generate(state: RagState) -> dict:
+    def generate(state: RagState) -> dict[str, Any]:
         docs = state["documents"]
-        feedback = "" if state.get("grounded", True) or not state.get("answer") else "\nYour previous answer had unsupported claims. Use only facts stated in the passages."
+        feedback = "" if state.get("grounded", True) or not bool(state.get("answer")) else "\nYour previous answer had unsupported claims. Use only facts stated in the passages."
         result = answer_llm.invoke([{"role": "user", "content": GENERATE_PROMPT.format(
             question=state["question"], context=_format_context(docs), feedback=feedback)}])
         valid = sorted({n for n in result.citations if 1 <= n <= len(docs)})  # drop hallucinated passage numbers
@@ -251,7 +250,7 @@ def build_graph(settings: Settings, model, retriever: HybridRetriever, checkpoin
         return "verify" if state["citations"] else "abstain"  # an uncited answer is not an answer
 
     @timed("verify")
-    def verify(state: RagState) -> dict:
+    def verify(state: RagState) -> dict[str, Any]:
         cited = [state["documents"][c["n"] - 1] for c in state["citations"]]
         verdict = verify_llm.invoke([{"role": "user", "content": VERIFY_PROMPT.format(
             question=state["question"], answer=state["answer"], context=_format_context(cited))}])
@@ -263,16 +262,16 @@ def build_graph(settings: Settings, model, retriever: HybridRetriever, checkpoin
         return "generate" if state["generations"] < settings.max_generations else "abstain"
 
     @timed("finalize")
-    def finalize(state: RagState) -> dict:
+    def finalize(state: RagState) -> dict[str, Any]:
         return {"status": "answered", "trace": _t(state, "finalize"), "messages": [AIMessage(state["answer"])]}
 
     @timed("abstain")
-    def abstain(state: RagState) -> dict:
+    def abstain(state: RagState) -> dict[str, Any]:
         # Deliberately generic: do NOT reveal that restricted documents exist.
         return {"answer": ABSTAIN_TEXT, "citations": [], "status": "abstained", "trace": _t(state, "abstain"),
                 "messages": [AIMessage(ABSTAIN_TEXT)]}
 
-    b = StateGraph(RagState, input_schema=RagInput, output_schema=RagOutput, context_schema=RagContext)
+    b = StateGraph(RagState, input_schema=RagInput, output_schema=RagOutput, context_schema=RagContext)  # ty: ignore[invalid-argument-type]
     b.add_node("guard_input", guard_input, destinations=("condense", "reject"))
     b.add_node("reject", reject)
     b.add_node("condense", condense, retry_policy=RETRY)

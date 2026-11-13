@@ -10,6 +10,7 @@ can change with the data, the embedding model and the question mix.
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any
 
 from westeros_rag.evals.run_evals import eval_retrieval, summarize_retrieval
 from westeros_rag.retrieval import HierarchicalRetriever
@@ -24,7 +25,7 @@ CONFIGS = {
 }
 
 
-def run_ablation(pipe, configs: dict[str, dict] | None = None) -> dict[str, dict]:
+def run_ablation(pipe, configs: dict[str, dict[str, Any]] | None = None) -> dict[str, dict[str, Any]]:
     out = {}
     for name, overrides in (configs or CONFIGS).items():
         retriever = HierarchicalRetriever(pipe.corpus, pipe.index, pipe.enrich, replace(pipe.settings, **overrides))
@@ -37,7 +38,7 @@ def run_ablation(pipe, configs: dict[str, dict] | None = None) -> dict[str, dict
 SUMMARY_WEIGHT_SWEEP = {f"summary_weight={w}": dict(strategy="hier", summary_weight=w) for w in (0.0, 0.25, 0.5, 1.0, 2.0)}
 
 
-def print_table(table: dict[str, dict]) -> None:
+def print_table(table: dict[str, dict[str, Any]]) -> None:
     print(f"{'configuration':<30} {'recall':>7} {'primary':>8} {'MRR':>6} {'ctx chars':>10} {'multi_hop':>10} {'regional':>9} {'acl leaks':>10}")
     for name, m in table.items():
         t = m["recall_by_tag"]

@@ -23,11 +23,10 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Literal
 
-from typing_extensions import TypedDict
-
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
+from typing_extensions import TypedDict
 
 from sql_agent import db
 from sql_agent.guard import validate_sql
@@ -55,25 +54,25 @@ class SQLState(TypedDict, total=False):
 _DEFAULT = object()
 
 
-def build_graph(db_path: str | Path, writer=None, checkpointer=_DEFAULT):  # noqa: ANN001
+def build_graph(db_path: str | Path, writer=None, checkpointer: Any = _DEFAULT):
     """checkpointer: default = in-memory; pass None for Studio/platform (it supplies its own)."""
     writer = writer or OfflineWriter()
     db_path = Path(db_path)
     ro = db.connect_readonly(db_path)
 
     # ---------------------------------------------------------------- nodes
-    def list_tables(state: SQLState) -> dict:
+    def list_tables(state: SQLState) -> dict[str, Any]:
         schema = db.schema_text(db_path)  # trusted path: not model-controlled
         return {"tables": sorted(schema), "schema": schema, "repairs": 0, "error": None}
 
-    def get_schema(state: SQLState) -> dict:
+    def get_schema(state: SQLState) -> dict[str, Any]:
         return {}  # kept as its own node so a real deployment can filter columns / sample rows here
 
-    def write_query(state: SQLState) -> dict:
+    def write_query(state: SQLState) -> dict[str, Any]:
         sql = writer.draft(state["question"], state["schema"], state.get("error"), state.get("sql"))
         return {"sql": sql}
 
-    def check_query(state: SQLState) -> dict:
+    def check_query(state: SQLState) -> dict[str, Any]:
         sql = state["sql"]
         if sql == NO_QUERY:
             return {"kind": "none"}
@@ -104,7 +103,7 @@ def build_graph(db_path: str | Path, writer=None, checkpointer=_DEFAULT):  # noq
             return "fail"  # (errors under the repair budget are routed to `bump` by the caller)
         return "run_query" if k == "read" else "approve_write"
 
-    def bump(state: SQLState) -> dict:
+    def bump(state: SQLState) -> dict[str, Any]:
         return {"repairs": state["repairs"] + 1}
 
     def run_query(state: SQLState) -> Command[Literal["answer", "write_query", "fail"]]:
@@ -112,12 +111,12 @@ def build_graph(db_path: str | Path, writer=None, checkpointer=_DEFAULT):  # noq
             cols, rows = db.run_read(ro, state["sql"])
         except sqlite3.Error as e:
             if state["repairs"] < MAX_REPAIRS:
-                return Command(goto="write_query", update={"error": str(e),
+                return Command(goto="write_query", update={"error": str(e),  # ty: ignore[invalid-explicit-return]
                                                            "repairs": state["repairs"] + 1})
-            return Command(goto="fail", update={"error": str(e)})
-        return Command(goto="answer", update={"columns": cols, "rows": [list(r) for r in rows]})
+            return Command(goto="fail", update={"error": str(e)})  # ty: ignore[invalid-explicit-return]
+        return Command(goto="answer", update={"columns": cols, "rows": [list(r) for r in rows]})  # ty: ignore[invalid-explicit-return]
 
-    def answer(state: SQLState) -> dict:
+    def answer(state: SQLState) -> dict[str, Any]:
         text = writer.answer(state["question"], state["sql"], state["columns"],
                              [tuple(r) for r in state["rows"]])
         return {"status": "answered", "answer": text}
@@ -130,30 +129,30 @@ def build_graph(db_path: str | Path, writer=None, checkpointer=_DEFAULT):  # noq
             "question": "Run this statement against the database?",
         })
         approved = decision is True or (isinstance(decision, dict) and decision.get("approve") is True)
-        return Command(goto="apply_write" if approved else "cancelled")
+        return Command(goto="apply_write" if approved else "cancelled")  # ty: ignore[invalid-explicit-return]
 
-    def apply_write_node(state: SQLState) -> dict:
+    def apply_write_node(state: SQLState) -> dict[str, Any]:
         n = db.apply_write(db_path, state["sql"])  # the ONLY node holding a write connection
         return {"status": "applied", "affected": n, "answer": f"Done. {n} row(s) changed."}
 
-    def cancelled(state: SQLState) -> dict:
+    def cancelled(state: SQLState) -> dict[str, Any]:
         return {"status": "cancelled", "answer": "Cancelled. Nothing was changed."}
 
-    def refuse(state: SQLState) -> dict:
+    def refuse(state: SQLState) -> dict[str, Any]:
         return {"status": "refused",
                 "answer": f"I can't run that query: {state['error']}. Nothing was executed."}
 
-    def out_of_scope(state: SQLState) -> dict:
+    def out_of_scope(state: SQLState) -> dict[str, Any]:
         return {"status": "out_of_scope",
                 "answer": "I can only answer questions about the shop database "
                           f"({', '.join(state['tables'])})."}
 
-    def fail(state: SQLState) -> dict:
+    def fail(state: SQLState) -> dict[str, Any]:
         return {"status": "failed",
                 "answer": f"I couldn't produce a working query after {MAX_REPAIRS} repairs: {state['error']}"}
 
     # ---------------------------------------------------------------- wiring
-    g = StateGraph(SQLState)
+    g = StateGraph(SQLState)  # ty: ignore[invalid-argument-type]
     g.add_node("list_tables", list_tables)
     g.add_node("get_schema", get_schema)
     g.add_node("write_query", write_query)

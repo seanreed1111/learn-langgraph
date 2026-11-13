@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
+from typing import Any, override
 
 from langchain_core.documents import Document
 from langchain_core.vectorstores import InMemoryVectorStore
@@ -39,11 +40,12 @@ class SyncStats:
     unchanged: list[str] = field(default_factory=list)
     entries: int = 0
 
+    @override
     def __str__(self) -> str:
         return f"added={len(self.added)} updated={len(self.updated)} removed={len(self.removed)} unchanged={len(self.unchanged)} entries={self.entries}"
 
 
-def build_entries(doc_id: str, corpus: Corpus, enrich: dict[str, dict], settings: WSettings) -> list[Document]:
+def build_entries(doc_id: str, corpus: Corpus, enrich: dict[str, dict[str, Any]], settings: WSettings) -> list[Document]:
     splitter = RecursiveCharacterTextSplitter(chunk_size=settings.chunk_size, chunk_overlap=settings.chunk_overlap)
     entries: list[Document] = []
     for unit in corpus.units(doc_id):
@@ -74,7 +76,7 @@ def build_entries(doc_id: str, corpus: Corpus, enrich: dict[str, dict], settings
 class VectorIndex:
     def __init__(self, settings: WSettings, embeddings, fingerprint: str) -> None:
         self.settings, self.embeddings, self.fingerprint = settings, embeddings, fingerprint
-        self.manifest: dict = {"embedding": fingerprint, "docs": {}}
+        self.manifest: dict[str, Any] = {"embedding": fingerprint, "docs": {}}
         self.store = InMemoryVectorStore(embeddings)
         self._load()
 
@@ -98,7 +100,7 @@ class VectorIndex:
         self.store.dump(str(self.settings.index_path))
         self._manifest_path.write_text(json.dumps(self.manifest, indent=1))
 
-    def sync(self, corpus: Corpus, enrich: dict[str, dict]) -> SyncStats:
+    def sync(self, corpus: Corpus, enrich: dict[str, dict[str, Any]]) -> SyncStats:
         stats, known = SyncStats(), self.manifest["docs"]
         for doc_id in [d for d in known if d not in corpus.docs]:
             self.store.delete(ids=known.pop(doc_id)["ids"])
@@ -115,7 +117,7 @@ class VectorIndex:
             else:
                 stats.added.append(doc_id)
             entries = build_entries(doc_id, corpus, enrich, self.settings)
-            self.store.add_documents(entries, ids=[e.id for e in entries])
+            self.store.add_documents(entries, ids=[str(e.id) for e in entries])
             known[doc_id] = {"sig": sig, "ids": [e.id for e in entries]}
         stats.entries = sum(len(v["ids"]) for v in known.values())
         if stats.added or stats.updated or stats.removed or not self.settings.index_path.exists():

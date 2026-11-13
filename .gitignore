@@ -7,3 +7,7 @@ __pycache__/
 .westeros_index/
 *.egg-info/
 .sql_demo.sqlite
+.ruff_cache/
+.coverage
+htmlcov/
+.ty_cache/

@@ -1,0 +1,13 @@
+# Local run of the RAG API: `docker compose up --build`  ->  http://localhost:8000/docs
+# Keys come from your shell / .env (never from the image). Without a key the API runs offline.
+services:
+  rag-api:
+    build: .
+    ports: ["8000:8000"]
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - rag-index:/app/.rag_index
+volumes:
+  rag-index:

@@ -10,6 +10,7 @@ prompts, to prove the guard - not the model - is what keeps you safe.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 NO_QUERY = ""  # the writer returns this when the question is not answerable from the schema
 
@@ -49,7 +50,7 @@ class OfflineWriter:
         if "most expensive product" in q:
             return "SELECT name, price FROM products ORDER BY price DESC LIMIT 1"
         if "revenue" in q and "category" in q:
-            if error and "no such column" in error:  # REPAIR using the error text
+            if error is not None and "no such column" in error:  # REPAIR using the error text
                 return ("SELECT p.category, SUM(oi.quantity * p.price) AS revenue "
                         "FROM order_items oi JOIN products p ON p.id = oi.product_id "
                         "GROUP BY p.category ORDER BY revenue DESC")
@@ -71,12 +72,12 @@ class OfflineWriter:
                     "(SELECT customer_id FROM orders) ORDER BY name")
         return NO_QUERY
 
-    def answer(self, question: str, sql: str, cols: list[str], rows: list[tuple]) -> str:
+    def answer(self, question: str, sql: str, cols: list[str], rows: list[tuple[Any, ...]]) -> str:
         if not rows:
             return "No matching rows."
         if len(rows) == 1 and len(rows[0]) == 1:
             return f"{cols[0]}: {rows[0][0]}"
-        return "\n".join(", ".join(f"{c}={v}" for c, v in zip(cols, r)) for r in rows)
+        return "\n".join(", ".join(f"{c}={v}" for c, v in zip(cols, r, strict=True)) for r in rows)
 
 
 def _country(word: str) -> str:

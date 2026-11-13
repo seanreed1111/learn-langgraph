@@ -16,13 +16,11 @@ Run:  python lessons/02_state_and_reducers.py
 """
 
 import operator
-from typing import Annotated
+from typing import Annotated, Any
 
 from langchain_core.messages import AIMessage, HumanMessage
-from typing_extensions import TypedDict
-
 from langgraph.graph import END, START, MessagesState, StateGraph
-from langgraph.graph.message import add_messages
+from typing_extensions import TypedDict
 
 
 # ---------------------------------------------------------------- reducers
@@ -31,15 +29,15 @@ class State(TypedDict):
     log: Annotated[list[str], operator.add]  # append
 
 
-def step_a(state: State) -> dict:
+def step_a(state: State) -> dict[str, Any]:
     return {"count": state["count"] + 1, "log": ["a ran"]}
 
 
-def step_b(state: State) -> dict:
+def step_b(state: State) -> dict[str, Any]:
     return {"count": state["count"] + 10, "log": ["b ran"]}
 
 
-b = StateGraph(State)
+b = StateGraph(State)  # ty: ignore[invalid-argument-type]
 b.add_node("a", step_a)
 b.add_node("b", step_b)
 b.add_edge(START, "a")
@@ -58,15 +56,15 @@ class ScoreState(TypedDict):
     best: Annotated[int, keep_max]
 
 
-def score_1(state: ScoreState) -> dict:
+def score_1(state: ScoreState) -> dict[str, Any]:
     return {"best": 5}
 
 
-def score_2(state: ScoreState) -> dict:
+def score_2(state: ScoreState) -> dict[str, Any]:
     return {"best": 3}
 
 
-s = StateGraph(ScoreState)
+s = StateGraph(ScoreState)  # ty: ignore[invalid-argument-type]
 s.add_node("score_1", score_1)
 s.add_node("score_2", score_2)
 s.add_edge(START, "score_1")
@@ -84,11 +82,11 @@ class ChatState(MessagesState):  # subclass to add more keys
     turns: int
 
 
-def reply(state: ChatState) -> dict:
+def reply(state: ChatState) -> dict[str, Any]:
     return {"messages": [AIMessage(content="Hi there!")], "turns": state.get("turns", 0) + 1}
 
 
-c = StateGraph(ChatState)
+c = StateGraph(ChatState)  # ty: ignore[invalid-argument-type]
 c.add_node("reply", reply)
 c.add_edge(START, "reply")
 c.add_edge("reply", END)
@@ -108,15 +106,15 @@ class OverallState(InputSchema, OutputSchema):
     scratch: str  # internal working data the caller never sees
 
 
-def think(state: InputSchema) -> dict:
+def think(state: InputSchema) -> dict[str, Any]:
     return {"scratch": f"thinking about {state['question']}"}
 
 
-def answer(state: OverallState) -> dict:
+def answer(state: OverallState) -> dict[str, Any]:
     return {"answer": f"42 ({state['scratch']})"}
 
 
-io = StateGraph(OverallState, input_schema=InputSchema, output_schema=OutputSchema)
+io = StateGraph(OverallState, input_schema=InputSchema, output_schema=OutputSchema)  # ty: ignore[invalid-argument-type]
 io.add_node("think", think)
 io.add_node("answer", answer)
 io.add_edge(START, "think")

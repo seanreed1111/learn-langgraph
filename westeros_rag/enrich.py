@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -45,13 +46,13 @@ class Enricher:
     def __init__(self, model, cache_path: Path, model_id: str = "offline") -> None:
         self.llm = model.with_structured_output(SectionMeta)
         self.cache_path, self.model_id = cache_path, model_id
-        self.cache: dict[str, dict] = json.loads(cache_path.read_text()) if cache_path.exists() else {}
+        self.cache: dict[str, dict[str, Any]] = json.loads(cache_path.read_text()) if cache_path.exists() else {}
         self.llm_calls = 0  # tests assert a second run makes ZERO calls
 
     def _key(self, heading: str, text: str) -> str:
         return hashlib.sha256(f"{PROMPT_VERSION}|{self.model_id}|{heading}|{text}".encode()).hexdigest()[:20]
 
-    def _one(self, heading: str, text: str) -> dict:
+    def _one(self, heading: str, text: str) -> dict[str, Any]:
         key = self._key(heading, text)
         if key not in self.cache:
             self.llm_calls += 1
@@ -62,9 +63,9 @@ class Enricher:
             }
         return self.cache[key]
 
-    def enrich(self, corpus: Corpus) -> dict[str, dict]:
+    def enrich(self, corpus: Corpus) -> dict[str, dict[str, Any]]:
         """Returns {unit_id: {"summary", "themes"}} for every unit (H1 overview + each H2 subtree)."""
-        out: dict[str, dict] = {}
+        out: dict[str, dict[str, Any]] = {}
         for doc in corpus.docs.values():
             h2_summaries = []
             for unit in corpus.units(doc.doc_id):

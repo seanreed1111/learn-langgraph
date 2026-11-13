@@ -1,11 +1,15 @@
 # LangGraph: Zero to Hero
 
 A hands-on, runnable path from "what's a graph?" to production-grade agents: 20 lessons, a capstone, three
-production-style apps (RAG, hierarchical RAG, SQL agent), 129 offline tests, and an interview guide.
+production-style apps (RAG, hierarchical RAG, SQL agent), an offline test suite with CI, and an interview guide.
 
 Everything runs **offline by default** (scripted fake LLMs and deterministic test doubles). Add an API key
-to `.env` and the same code uses a real model. Verified against `langgraph 1.2.21`, `langchain 1.5`,
-`langchain-core 1.8`, Python 3.14 (the project requires Python 3.12+).
+to `.env` and the same code uses a real model (see [Using a real model](docs/real-models.md)).
+
+Dependencies are **pinned to exact versions** in `pyproject.toml` (verified together on 2026-11-12:
+`langgraph 1.2.21`, `langchain 1.5.0`, `langchain-core 1.8.0`, `langchain-anthropic 1.7.10`). CI runs the
+tests on Python 3.12, 3.13 and 3.14; the project requires Python 3.12+. The default model is
+`anthropic:claude-sonnet-5-5` (the newest Sonnet); change it with one environment variable.
 
 ## Table of contents
 
@@ -72,15 +76,17 @@ Windows PowerShell (Python 3.12+; the project builds with Hatch/Hatchling):
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"      # runtime deps + pytest/httpx
+pip install -e ".[dev]"      # exact-pinned runtime deps + pytest, pytest-cov, ruff, ty, httpx2
 copy .env.example .env       # optional: add a key to use a real LLM
-pytest -q                    # should be all green (129 tests, no network needed)
+pytest -q                    # should be all green (offline: no network, no API keys)
 ```
 
 Optional extras: `pip install -e ".[openai]"` for real embeddings (Anthropic has no embeddings API) and
 `".[postgres]"` for the Postgres checkpointer.
 
-Run any lesson: `python lessons/05_agent_from_scratch.py`
+Run any lesson: `python lessons/05_agent_from_scratch.py`. With [Hatch](https://hatch.pypa.io) installed you can
+use the project scripts instead: `hatch run test`, `hatch run check` (lint + types + coverage). See
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Curriculum at a glance
 
@@ -802,7 +808,7 @@ everything into `messages` (fine for a tutorial, not for production).
 ### Lesson 14: Production RAG
 
 **Narrative:** [`lessons/14_production_rag.md`](lessons/14_production_rag.md) · **Code:** [`rag_prod/`](rag_prod) ·
-**Data:** `data/kb/` (8 documents with access labels) · **Tests:** `tests/test_rag_prod.py` (20) ·
+**Data:** `data/kb/` (8 documents with access labels) · **Tests:** `tests/test_rag_prod.py` ·
 **Prerequisites:** lesson 13, and 07-08 for the checkpointer and interrupt exercises.
 
 **Overview.** Lesson 13 works. This lesson answers the question hiring managers ask: *what would you change
@@ -830,7 +836,7 @@ filtered), `grade_documents` (per chunk, parallel), a rewrite loop or abstain, `
 typed state, budgets, grounding, retries, observability, the API layer, evals), then moving to real models,
 what is still missing, exercises and interview points.
 
-**Run it and what you should see.** `pytest -q tests/test_rag_prod.py` passes (20); `python -m rag_prod.evals.run_evals`
+**Run it and what you should see.** `pytest -q tests/test_rag_prod.py` passes; `python -m rag_prod.evals.run_evals`
 prints per-case results and a gate that exits non-zero below thresholds; `uvicorn rag_prod.api:app --port 8000`
 serves `/chat` with an `X-API-Key` header.
 
@@ -870,7 +876,7 @@ as harmless when it reveals which documents exist.
 
 **Narrative:** [`lessons/15_westeros_rag.md`](lessons/15_westeros_rag.md) · **Code:** [`westeros_rag/`](westeros_rag) ·
 **Corpus:** `data/westeros/` (22 linked markdown documents, 190 sections, 181 links) ·
-**Tests:** `tests/test_westeros.py` (52) · **Prerequisites:** lesson 14.
+**Tests:** `tests/test_westeros.py` · **Prerequisites:** lesson 14.
 
 **Overview.** Real documents have structure: headings, sections and cross-references. This lesson builds a
 corpus of linked markdown on the (fictional) laws of Westeros and a complete pipeline over it, from parsing to
@@ -1118,7 +1124,7 @@ lines, history steps with their `next`, the conflict error message, the recursio
 ### Lesson 19: Gotchas and anti-patterns
 
 **Narrative:** [`lessons/19_gotchas.md`](lessons/19_gotchas.md) · **Proof:** [`lessons/19_gotchas.py`](lessons/19_gotchas.py) ·
-**Tests:** `tests/test_gotchas.py` (15) · **Prerequisites:** lessons 02-08, 18.
+**Tests:** `tests/test_gotchas.py` · **Prerequisites:** lessons 02-08, 18.
 
 **Overview.** Most intermediate and advanced pain is a small set of *silent* failures: the graph runs,
 nothing raises, and the behavior is wrong. Each gotcha here is reproduced by a runnable function and pinned
@@ -1144,7 +1150,7 @@ victim's data while a `ToolRuntime` identity returned the real user's; compiling
 a millisecond. A final checklist is meant for code review.
 
 **Run it and what you should see.** `python lessons/19_gotchas.py` prints one result dict per gotcha;
-`pytest tests/test_gotchas.py` passes (15). After an upgrade, a failing test means the lesson is stale.
+`pytest tests/test_gotchas.py` passes. After an upgrade, a failing test means the lesson is stale.
 
 **Common mistakes.** Treating this as trivia instead of as a review checklist; fixing the symptom
 (for example, raising `recursion_limit`) instead of the design.
@@ -1181,7 +1187,7 @@ a millisecond. A final checklist is meant for code review.
 ### Lesson 20: A safe SQL agent
 
 **Narrative:** [`lessons/20_sql_agent.md`](lessons/20_sql_agent.md) · **Code:** [`sql_agent/`](sql_agent) ·
-**Tests:** `tests/test_sql_agent.py` (26) · **Prerequisites:** lessons 08, 12; 14 helps for the evals.
+**Tests:** `tests/test_sql_agent.py` · **Prerequisites:** lessons 08, 12; 14 helps for the evals.
 
 **Overview.** An LLM that writes SQL can write `DROP TABLE`. You do not fix that with a better prompt; you
 fix it with layers that each assume the previous one failed, and with a graph in which the dangerous step
@@ -1328,14 +1334,16 @@ provider rejects the next request); no explicit recursion limit.
 
 ```
 lessons/        01-12, 16-18 scripts; 13 tutorial; 14, 15, 19, 20 narratives (.md); 19_gotchas.py; common.py, offline_llm.py
+docs/           lessons/ (per-lesson plans by track), real-models.md
 capstone/       support_agent.py
 rag_prod/       lesson 14 service (ingest, retrieval, graph, api, evals)
 westeros_rag/   lesson 15 pipeline (parse, enrich, index, retrieval, guardrails, graph, cli, api, evals)
 sql_agent/      lesson 20 agent (db, guard, graph, offline/llm writers, cli, evals)
-data/           blog/ (13), kb/ (14), westeros/ (15, 22 linked documents)
-tests/          129 offline tests
+data/           blog/ (13), kb/ (14), westeros/ (15, linked documents)
+tests/          offline tests (+ opt-in live tests); conftest.py forces offline mode
+.github/        CI: ruff, ty, pytest + coverage on Python 3.12 / 3.13 / 3.14
 langgraph.json  Studio / `langgraph dev` entries: rag, westeros, sql
-Dockerfile      serves rag_prod (see PRODUCTION_CHECKLIST.md)
+Dockerfile      serves rag_prod (cached dependency layer, non-root); docker-compose.yml runs it locally
 ```
 
 Offline doubles live in `lessons/common.py` (scripted chat model) and `lessons/offline_llm.py` (hashing
@@ -1345,25 +1353,39 @@ harnesses*, not model quality, so re-run the evals with a real model to measure 
 ## Testing and quality gates
 
 ```powershell
-pytest -q                                  # 129 tests, offline
+pytest -q                                  # offline unit + smoke tests (every lesson is run as a script)
+pytest -q --cov                            # with coverage (fails under the floor in pyproject.toml)
+ruff check .                               # lint
+ty check                                   # type check: Astral's ty, every rule set to error
+pytest -q -m live                          # OPT-IN: real model (needs ANTHROPIC_API_KEY); costs cents
 python -m rag_prod.evals.run_evals         # lesson 14 gate (exit code 1 on failure)
 python -m westeros_rag.evals.run_evals     # lesson 15 gate
 python -m sql_agent.evals.run_evals        # lesson 20 gate
 ```
 
-| Test file | Tests | Covers |
-|---|---|---|
-| `tests/test_graphs.py` | 9 | lessons 01-12 samples, lesson 13 paths, capstone approval gate |
-| `tests/test_rag_prod.py` | 20 | lesson 14 |
-| `tests/test_westeros.py` | 52 | lesson 15 |
-| `tests/test_lessons_16_18.py` | 7 | lessons 16-18 |
-| `tests/test_sql_agent.py` | 26 | lesson 20 |
-| `tests/test_gotchas.py` | 15 | lesson 19 (pins library behavior) |
+| Test file | Covers |
+|---|---|
+| `tests/test_graphs.py` | lessons 01-12 samples, lesson 13 paths, capstone approval gate |
+| `tests/test_smoke.py` | **every lesson and the capstone run as scripts**, both CLIs, all three eval gates |
+| `tests/test_model_config.py` | the one place model ids and provider selection live |
+| `tests/test_rag_prod.py` | lesson 14 |
+| `tests/test_westeros.py` | lesson 15 |
+| `tests/test_lessons_16_18.py` | lessons 16-18 |
+| `tests/test_sql_agent.py` | lesson 20 |
+| `tests/test_gotchas.py` | lesson 19 (pins library behavior) |
+| `tests/test_repo_integrity.py` | exact pins match the installed packages; README/doc links resolve |
+| `tests/test_live.py` | opt-in smoke tests against a real model |
+
+Type checking uses **`ty` with `all = "error"`** plus its strict analysis switches. LangGraph's `StateGraph(State)`
+and `Command[Literal[...]]` patterns are not yet understood by `ty`, so those lines carry a targeted
+`# ty: ignore[rule]`; `ty` reports an ignore that is no longer needed, so they disappear as `ty` improves.
 
 ## Companion documents
 
 - [`INTERVIEW.md`](INTERVIEW.md): 34 questions and answers with lesson pointers, plus whiteboard drills.
 - [`PRODUCTION_CHECKLIST.md`](PRODUCTION_CHECKLIST.md): what is done and what remains before shipping.
+- [`docs/real-models.md`](docs/real-models.md): what changes when you leave the offline fakes.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md): dev loop, upgrade procedure, how the quality gates fit together.
 
 ## Portfolio projects
 

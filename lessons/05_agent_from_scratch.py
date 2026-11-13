@@ -19,12 +19,12 @@ ONLINE : add an API key to .env and the same graph uses a real LLM.
 Run:  python lessons/05_agent_from_scratch.py
 """
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
-from langchain_core.tools import tool
-
-from langgraph.graph import END, START, MessagesState, StateGraph
+from typing import Any
 
 from common import banner, get_model, tool_call_msg
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.tools import tool
+from langgraph.graph import END, START, MessagesState, StateGraph
 
 
 # ------------------------------------------------------------------ tools
@@ -56,14 +56,14 @@ SYSTEM = SystemMessage("You are a careful math assistant. Use tools for arithmet
 
 
 # ------------------------------------------------------------------ nodes
-def llm(state: MessagesState) -> dict:
+def llm(state: MessagesState) -> dict[str, Any]:
     return {"messages": [model.invoke([SYSTEM, *state["messages"]])]}
 
 
-def run_tools(state: MessagesState) -> dict:
+def run_tools(state: MessagesState) -> dict[str, Any]:
     last = state["messages"][-1]
     results = []
-    for call in last.tool_calls:
+    for call in last.tool_calls:  # ty: ignore[missing-union-attribute]
         output = tools_by_name[call["name"]].invoke(call["args"])
         # tool_call_id links the result to the request - APIs reject mismatches.
         results.append(ToolMessage(content=str(output), tool_call_id=call["id"]))
@@ -71,10 +71,10 @@ def run_tools(state: MessagesState) -> dict:
 
 
 def route(state: MessagesState) -> str:
-    return "tools" if state["messages"][-1].tool_calls else END
+    return "tools" if state["messages"][-1].tool_calls else END  # ty: ignore[missing-union-attribute]
 
 
-b = StateGraph(MessagesState)
+b = StateGraph(MessagesState)  # ty: ignore[invalid-argument-type]
 b.add_node("llm", llm)
 b.add_node("tools", run_tools)
 b.add_edge(START, "llm")

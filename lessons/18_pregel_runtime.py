@@ -29,14 +29,14 @@ Run:  python lessons/18_pregel_runtime.py
 from __future__ import annotations
 
 import operator
-from typing import Annotated
+from typing import Annotated, Any
 
-from typing_extensions import TypedDict
-
+from langchain_core.runnables import RunnableConfig
 from langgraph.channels import LastValue
 from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.graph import END, START, StateGraph
 from langgraph.pregel import NodeBuilder, Pregel
+from typing_extensions import TypedDict
 
 
 class State(TypedDict):
@@ -44,23 +44,23 @@ class State(TypedDict):
     log: Annotated[list[str], operator.add]
 
 
-def a(s: State) -> dict:
+def a(s: State) -> dict[str, Any]:
     return {"log": [f"a saw x={s['x']}"], "x": 100}
 
 
-def b(s: State) -> dict:
+def b(s: State) -> dict[str, Any]:
     return {"log": [f"b saw x={s['x']}"]}  # same snapshot as `a`: still sees the OLD x
 
 
-def c(s: State) -> dict:
+def c(s: State) -> dict[str, Any]:
     return {"log": [f"c saw x={s['x']}"]}  # next super-step: sees a's write
 
 
 def parallel_graph():
-    g = StateGraph(State)
-    g.add_node("a", a)
-    g.add_node("b", b)
-    g.add_node("c", c)
+    g = StateGraph(State)  # ty: ignore[invalid-argument-type]
+    g.add_node("a", a)  # ty: ignore[invalid-argument-type]
+    g.add_node("b", b)  # ty: ignore[invalid-argument-type]
+    g.add_node("c", c)  # ty: ignore[invalid-argument-type]
     g.add_edge(START, "a")
     g.add_edge(START, "b")
     g.add_edge("a", "c")
@@ -70,18 +70,18 @@ def parallel_graph():
 
 
 # ---- a conflict: two parallel nodes write a LastValue key
-def w1(s: State) -> dict:
+def w1(s: State) -> dict[str, Any]:
     return {"x": 1}
 
 
-def w2(s: State) -> dict:
+def w2(s: State) -> dict[str, Any]:
     return {"x": 2}
 
 
 def conflict_graph():
-    g = StateGraph(State)
-    g.add_node("w1", w1)
-    g.add_node("w2", w2)
+    g = StateGraph(State)  # ty: ignore[invalid-argument-type]
+    g.add_node("w1", w1)  # ty: ignore[invalid-argument-type]
+    g.add_node("w2", w2)  # ty: ignore[invalid-argument-type]
     g.add_edge(START, "w1")
     g.add_edge(START, "w2")
     g.add_edge("w1", END)
@@ -90,20 +90,20 @@ def conflict_graph():
 
 
 # ---- a loop that burns super-steps
-def loop_node(s: State) -> dict:
+def loop_node(s: State) -> dict[str, Any]:
     return {"x": s["x"] + 1}
 
 
 def loop_graph():
-    g = StateGraph(State)
-    g.add_node("inc", loop_node)
+    g = StateGraph(State)  # ty: ignore[invalid-argument-type]
+    g.add_node("inc", loop_node)  # ty: ignore[invalid-argument-type]
     g.add_edge(START, "inc")
     g.add_conditional_edges("inc", lambda s: "inc" if s["x"] < 1000 else END, ["inc", END])
     return g.compile()
 
 
 # ---- the same engine, hand-built, with no StateGraph at all
-def raw_pregel() -> Pregel:
+def raw_pregel() -> Pregel[Any]:
     plus_one = NodeBuilder().subscribe_only("a").do(lambda v: v + 1).write_to("b")
     times_ten = NodeBuilder().subscribe_only("b").do(lambda v: v * 10).write_to("c")
     return Pregel(
@@ -129,18 +129,19 @@ if __name__ == "__main__":
     print("\n3) checkpoints = super-steps")
     from langgraph.checkpoint.memory import InMemorySaver
 
-    gc = StateGraph(State)
+    gc = StateGraph(State)  # ty: ignore[invalid-argument-type]
     for name, fn in [("a", a), ("b", b), ("c", c)]:
-        gc.add_node(name, fn)
+        gc.add_node(name, fn)  # ty: ignore[invalid-argument-type]
     gc.add_edge(START, "a")
     gc.add_edge(START, "b")
     gc.add_edge("a", "c")
     gc.add_edge("b", "c")
     gc.add_edge("c", END)
     gc = gc.compile(checkpointer=InMemorySaver())
-    cfg = {"configurable": {"thread_id": "t"}}
+    cfg: RunnableConfig = {"configurable": {"thread_id": "t"}}
     gc.invoke({"x": 0, "log": []}, cfg)
     for snap in reversed(list(gc.get_state_history(cfg))):
+        assert snap.metadata is not None
         print(f"   step {snap.metadata['step']:>2}  next={snap.next}")
 
     print("\n4) two writers, one LastValue key, one super-step")

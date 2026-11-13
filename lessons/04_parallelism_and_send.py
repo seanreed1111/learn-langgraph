@@ -12,12 +12,11 @@ Run:  python lessons/04_parallelism_and_send.py
 """
 
 import operator
-from typing import Annotated
-
-from typing_extensions import TypedDict
+from typing import Annotated, Any
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
+from typing_extensions import TypedDict
 
 
 # ---------------------------------------------------------- static fan-out
@@ -27,20 +26,20 @@ class FanState(TypedDict):
     report: str
 
 
-def research_wiki(state: FanState) -> dict:
+def research_wiki(state: FanState) -> dict[str, Any]:
     return {"facts": [f"wiki: {state['topic']} is interesting"]}
 
 
-def research_news(state: FanState) -> dict:
+def research_news(state: FanState) -> dict[str, Any]:
     return {"facts": [f"news: {state['topic']} trending"]}
 
 
-def write_report(state: FanState) -> dict:
+def write_report(state: FanState) -> dict[str, Any]:
     # Runs ONCE, after both research nodes finish.
     return {"report": " | ".join(sorted(state["facts"]))}
 
 
-f = StateGraph(FanState)
+f = StateGraph(FanState)  # ty: ignore[invalid-argument-type]
 f.add_node("research_wiki", research_wiki)
 f.add_node("research_news", research_news)
 f.add_node("write_report", write_report)
@@ -68,15 +67,15 @@ def fan_out(state: OverallState) -> list[Send]:
     return [Send("summarize", {"doc": d}) for d in state["documents"]]
 
 
-def summarize(state: DocState) -> dict:
+def summarize(state: DocState) -> dict[str, Any]:
     return {"summaries": [state["doc"][:10] + "..."]}
 
 
-def combine(state: OverallState) -> dict:
+def combine(state: OverallState) -> dict[str, Any]:
     return {"final": f"{len(state['summaries'])} summaries: {sorted(state['summaries'])}"}
 
 
-m = StateGraph(OverallState)
+m = StateGraph(OverallState)  # ty: ignore[invalid-argument-type]
 m.add_node("summarize", summarize)
 m.add_node("combine", combine)
 m.add_conditional_edges(START, fan_out, ["summarize"])

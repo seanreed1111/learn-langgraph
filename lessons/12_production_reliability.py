@@ -13,11 +13,12 @@ What separates a demo from something a company will pay you to build.
 Run:  python lessons/12_production_reliability.py
 """
 
-from typing_extensions import TypedDict
+from typing import Any
 
 from langgraph.cache.memory import InMemoryCache
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import CachePolicy, RetryPolicy
+from typing_extensions import TypedDict
 
 
 class State(TypedDict):
@@ -30,7 +31,7 @@ class State(TypedDict):
 ATTEMPTS = {"n": 0}
 
 
-def flaky_api(state: State) -> dict:
+def flaky_api(state: State) -> dict[str, Any]:
     ATTEMPTS["n"] += 1
     if ATTEMPTS["n"] < 3:
         raise ConnectionError(f"upstream timeout (attempt {ATTEMPTS['n']})")
@@ -41,12 +42,12 @@ def flaky_api(state: State) -> dict:
 CALLS = {"expensive": 0}
 
 
-def expensive(state: State) -> dict:
+def expensive(state: State) -> dict[str, Any]:
     CALLS["expensive"] += 1
     return {"result": state["data"].upper()}
 
 
-b = StateGraph(State)
+b = StateGraph(State)  # ty: ignore[invalid-argument-type]
 b.add_node(
     "flaky_api",
     flaky_api,
@@ -65,7 +66,7 @@ def safe_tool_call(tool_fn, **kwargs) -> str:
     """Pattern: never let a tool exception kill the agent loop - report it to the model."""
     try:
         return str(tool_fn(**kwargs))
-    except Exception as exc:  # noqa: BLE001 - deliberate: surface to the LLM
+    except Exception as exc:
         return f"ERROR: {type(exc).__name__}: {exc}. Fix the arguments and try again."
 
 

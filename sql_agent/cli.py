@@ -7,6 +7,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
 from sql_agent.db import create_demo_db
@@ -23,7 +24,7 @@ def main() -> None:
 
     path = Path(a.db) if a.db else create_demo_db(Path(tempfile.mkdtemp()) / "demo.sqlite")
     graph = build_graph(path, get_writer())
-    cfg = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    cfg: RunnableConfig = {"configurable": {"thread_id": str(uuid.uuid4())}}
     out = graph.invoke({"question": a.question}, cfg)
     if "__interrupt__" in out:
         req = out["__interrupt__"][0].value

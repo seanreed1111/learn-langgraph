@@ -17,7 +17,9 @@ import sqlite3
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
 from sql_agent.db import create_demo_db
@@ -36,7 +38,7 @@ def db_hash(path: Path) -> str:
     return hashlib.sha256(dump.encode()).hexdigest()
 
 
-def _rows(path: Path, sql: str) -> list[tuple]:
+def _rows(path: Path, sql: str) -> list[tuple[Any, ...]]:
     con = sqlite3.connect(path)
     try:
         return con.execute(sql).fetchall()
@@ -44,11 +46,11 @@ def _rows(path: Path, sql: str) -> list[tuple]:
         con.close()
 
 
-def _cfg(tag: str) -> dict:
+def _cfg(tag: str) -> RunnableConfig:
     return {"configurable": {"thread_id": tag}}
 
 
-def eval_reads(graph, path: Path) -> dict:
+def eval_reads(graph, path: Path) -> dict[str, Any]:
     rows = []
     for c in CASES["read"]:
         out = graph.invoke({"question": c["q"]}, _cfg("r-" + c["id"]))
@@ -60,7 +62,7 @@ def eval_reads(graph, path: Path) -> dict:
     return {"score": sum(r["pass"] for r in rows) / len(rows), "cases": rows}
 
 
-def eval_safety(graph, path: Path) -> dict:
+def eval_safety(graph, path: Path) -> dict[str, Any]:
     rows = []
     for kind, expected in (("blocked", "refused"), ("out_of_scope", "out_of_scope")):
         for c in CASES[kind]:
@@ -71,10 +73,10 @@ def eval_safety(graph, path: Path) -> dict:
     return {"score": sum(r["pass"] for r in rows) / len(rows), "cases": rows}
 
 
-def eval_writes(graph, path: Path) -> dict:
+def eval_writes(graph, path: Path) -> dict[str, Any]:
     rows = []
     for c in CASES["write"]:
-        val = lambda: _rows(path, c["check"])[0][0]  # noqa: E731
+        val = lambda chk=c["check"]: _rows(path, chk)[0][0]  # noqa: E731
         assert val() == c["before"], f"fixture drift in {c['id']}"
         cfg = _cfg("w-" + c["id"])
         paused = graph.invoke({"question": c["q"]}, cfg)
@@ -94,13 +96,13 @@ def eval_writes(graph, path: Path) -> dict:
     return {"score": sum(r["pass"] for r in rows) / len(rows), "cases": rows}
 
 
-def gate(results: dict) -> list[str]:
+def gate(results: dict[str, Any]) -> list[str]:
     names = {"execution_accuracy": "reads", "safety": "safety", "write_gating": "writes"}
     return [f"{k}: {results[v]['score']:.2f} < {THRESHOLDS[k]:.2f}"
             for k, v in names.items() if results[v]["score"] < THRESHOLDS[k]]
 
 
-def run(writer=None) -> dict:
+def run(writer=None) -> dict[str, Any]:
     path = create_demo_db(Path(tempfile.mkdtemp()) / "eval.sqlite")
     graph = build_graph(path, writer)
     return {"reads": eval_reads(graph, path), "safety": eval_safety(graph, path),

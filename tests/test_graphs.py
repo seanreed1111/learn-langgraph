@@ -2,9 +2,10 @@
 
 Run:  pytest -q
 """
-
 import sys
 from pathlib import Path
+
+from langchain_core.runnables import RunnableConfig
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "lessons"))
@@ -19,7 +20,6 @@ for _k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"):
 
 import pytest  # noqa: E402
 from langchain_core.messages import HumanMessage  # noqa: E402
-
 from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
 from langgraph.types import Command  # noqa: E402
 
@@ -57,7 +57,7 @@ def test_agent_calls_tool_then_answers():
 
 def test_interrupt_and_resume():
     m = load("08_human_in_the_loop")
-    cfg = {"configurable": {"thread_id": "t-test"}}
+    cfg: RunnableConfig = {"configurable": {"thread_id": "t-test"}}
     paused = m.graph.invoke({"customer": "A", "amount": 5.0}, cfg)
     assert "__interrupt__" in paused
     assert m.graph.invoke(Command(resume="approve"), cfg)["outcome"].startswith("Refunded")
@@ -88,7 +88,7 @@ def test_capstone_approval_gate(decision, expect_refund):
     cap = load("support_agent")
     cap.REFUNDS.clear()
     agent = cap.build_agent(cap.scripted_model(), InMemorySaver())
-    cfg = {"configurable": {"thread_id": f"cap-{decision}"}}
+    cfg: RunnableConfig = {"configurable": {"thread_id": f"cap-{decision}"}}
     paused = agent.invoke({"messages": [HumanMessage("refund order 123")]}, cfg)
     assert "__interrupt__" in paused
     assert cap.REFUNDS == []  # NOTHING happened before approval - the key safety property

@@ -24,12 +24,12 @@ import json
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
-
 from langgraph.checkpoint.sqlite import SqliteSaver
+from pydantic import BaseModel, Field
 
 from rag_prod.app import USERS, build_app
 from rag_prod.config import Settings
@@ -50,12 +50,12 @@ class ChatResponse(BaseModel):
     thread_id: str
     status: str
     answer: str
-    citations: list[dict]
+    citations: list[dict[str, Any]]
 
 
 def authenticate(api_key: str | None) -> RagContext:
     user = API_KEYS.get(api_key or "")
-    if not user:
+    if user is None:
         raise HTTPException(status_code=401, detail="invalid or missing API key")
     return USERS[user]
 
@@ -86,11 +86,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return client_thread, request_id, config, {"messages": [{"role": "user", "content": req.question}]}
 
     @app.get("/healthz")
-    def healthz() -> dict:
+    def healthz() -> dict[str, Any]:
         return {"ok": True}
 
     @app.get("/readyz")
-    def readyz() -> dict:
+    def readyz() -> dict[str, Any]:
         ready = getattr(app.state, "graph", None) is not None
         if not ready:
             raise HTTPException(status_code=503, detail="not ready")
@@ -102,9 +102,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         thread, request_id, config, payload = _inputs(req, ctx)
         try:
             out = app.state.graph.invoke(payload, config, context=ctx)
-        except Exception:
+        except Exception:  # details are logged, never leaked to the client
             logger.exception("chat_failed", extra={"fields": {"request_id": request_id}})
-            raise HTTPException(status_code=502, detail=f"upstream error (request_id={request_id})")
+            raise HTTPException(status_code=502, detail=f"upstream error (request_id={request_id})") from None
         return ChatResponse(request_id=request_id, thread_id=thread, status=out["status"],
                             answer=out["answer"], citations=out["citations"])
 
@@ -113,7 +113,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ctx = authenticate(x_api_key)  # authenticate BEFORE opening the stream
         thread, request_id, config, payload = _inputs(req, ctx)
 
-        def sse(obj: dict) -> str:
+        def sse(obj: dict[str, Any]) -> str:
             return f"data: {json.dumps(obj)}\n\n"
 
         def events():

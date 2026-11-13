@@ -17,16 +17,13 @@ from __future__ import annotations
 import math
 import re
 import zlib
-from typing import Any
+from typing import Any, override
 
 from langchain_core.embeddings import Embeddings
 from langchain_core.messages import AIMessage, BaseMessage
 
 STOP = set(
-    "the a an and or of to in on for with is are was were be been it its this that these those "
-    "what who whom how why when where which does do did can could would should about from into "
-    "at by as not no any all some your our their his her you we they i me my say says said tell "
-    "please there than then so if but also have has had more most very".split()
+    ["the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with", "is", "are", "was", "were", "be", "been", "it", "its", "this", "that", "these", "those", "what", "who", "whom", "how", "why", "when", "where", "which", "does", "do", "did", "can", "could", "would", "should", "about", "from", "into", "at", "by", "as", "not", "no", "any", "all", "some", "your", "our", "their", "his", "her", "you", "we", "they", "i", "me", "my", "say", "says", "said", "tell", "please", "there", "than", "then", "so", "if", "but", "also", "have", "has", "had", "more", "most", "very"]
 )
 
 # A tiny thesaurus the offline "rewriter" uses to expand vague questions into corpus vocabulary.
@@ -74,9 +71,11 @@ class HashingEmbeddings(Embeddings):
         norm = math.sqrt(sum(v * v for v in vec)) or 1.0
         return [v / norm for v in vec]
 
+    @override
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return [self._embed(t) for t in texts]
 
+    @override
     def embed_query(self, text: str) -> list[float]:
         return self._embed(text)
 
@@ -86,7 +85,7 @@ def _text_of(msg: Any) -> str:
     if isinstance(msg, dict):
         return str(msg.get("content", ""))
     if isinstance(msg, BaseMessage):
-        return msg.text if hasattr(msg, "text") and isinstance(msg.text, str) else str(msg.content)
+        return msg.text if hasattr(msg, "text") else str(msg.content)
     return str(msg)
 
 
@@ -98,7 +97,7 @@ def _prompt(messages: Any) -> str:
 
 def _between(text: str, start: str, end: str) -> str:
     m = re.search(re.escape(start) + r"(.*?)" + re.escape(end), text, re.S)
-    return m.group(1).strip() if m else ""
+    return str(m.group(1)).strip() if m else ""
 
 
 def _question_from(prompt: str) -> str:
@@ -191,10 +190,10 @@ class _Structured:
 class OfflineChatModel:
     """Rule-based fake chat model. See module docstring."""
 
-    def __init__(self, tools: list | None = None) -> None:
+    def __init__(self, tools: list[Any] | None = None) -> None:
         self.tools = tools or []
 
-    def bind_tools(self, tools: list, **kwargs: Any) -> "OfflineChatModel":
+    def bind_tools(self, tools: list[Any], **kwargs: Any) -> OfflineChatModel:
         return OfflineChatModel(tools)
 
     def with_structured_output(self, schema: type, **kwargs: Any) -> _Structured:

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 from pydantic import BaseModel, Field
 
 from sql_agent.offline import NO_QUERY, OfflineWriter
@@ -27,20 +25,20 @@ QUESTION: {question}"""
 
 
 class ModelWriter:
-    def __init__(self, model) -> None:  # noqa: ANN001
+    def __init__(self, model) -> None:
         self._draft = model.with_structured_output(SQLDraft)
         self._model = model
 
-    def draft(self, question, schema, error=None, prev_sql=None) -> str:  # noqa: ANN001
+    def draft(self, question, schema, error=None, prev_sql=None) -> str:
         repair = f"\nYour previous SQL was:\n{prev_sql}\nIt failed with: {error}\nFix it.\n" if error else ""
         out = self._draft.invoke(PROMPT.format(schema="\n".join(schema.values()),
                                                repair=repair, question=question))
-        return (out.sql or NO_QUERY).strip()
+        return str(out.sql or NO_QUERY).strip()
 
-    def answer(self, question, sql, cols, rows) -> str:  # noqa: ANN001
+    def answer(self, question, sql, cols, rows) -> str:
         if not rows:
             return "No matching rows."
-        table = "\n".join(", ".join(f"{c}={v}" for c, v in zip(cols, r)) for r in rows[:20])
+        table = "\n".join(", ".join(f"{c}={v}" for c, v in zip(cols, r, strict=True)) for r in rows[:20])
         msg = self._model.invoke(
             "Answer the question using ONLY these rows. Be brief.\n"
             f"Question: {question}\nSQL: {sql}\nRows:\n{table}")
@@ -48,12 +46,8 @@ class ModelWriter:
 
 
 def get_writer():
-    from dotenv import load_dotenv
+    from rag_prod.llm import have_real_llm, make_real_chat_model  # also loads .env via lessons/common
 
-    load_dotenv()
-    if os.getenv("ANTHROPIC_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
-        from langchain.chat_models import init_chat_model
-
-        return ModelWriter(init_chat_model(os.getenv("LG_MODEL", "anthropic:claude-sonnet-4-6"),
-                                           temperature=0))
+    if have_real_llm():
+        return ModelWriter(make_real_chat_model())
     return OfflineWriter()

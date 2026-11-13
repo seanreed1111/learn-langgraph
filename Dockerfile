@@ -1,13 +1,20 @@
 FROM python:3.12-slim
 
-ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PYTHONPATH=/app
 WORKDIR /app
 
-COPY . .
-RUN pip install -e ".[openai]"
+# Layer 1 (cached until pyproject.toml changes): the exact pinned runtime deps, incl. the openai extra.
+COPY pyproject.toml ./
+RUN python -c "import tomllib, pathlib; p = tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']; pathlib.Path('/tmp/req.txt').write_text(chr(10).join(p['dependencies'] + p['optional-dependencies']['openai']))" \
+ && pip install -r /tmp/req.txt
+
+# Layer 2: application code and the demo corpus only (see .dockerignore).
+COPY rag_prod ./rag_prod
+COPY lessons ./lessons
+COPY data ./data
 
 # never run as root
-RUN useradd -m app && chown -R app /app
+RUN useradd -m app && mkdir -p /app/.rag_index && chown -R app /app
 USER app
 
 # Secrets (ANTHROPIC_API_KEY, OPENAI_API_KEY, LANGSMITH_API_KEY) come from the environment / secret manager, NOT the image.

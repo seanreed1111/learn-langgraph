@@ -5,27 +5,100 @@ build-backend = "hatchling.build"
 [project]
 name = "learn-langgraph"
 version = "0.1.0"
-description = "LangGraph zero-to-hero lessons + a production-style agentic RAG service"
+description = "LangGraph zero-to-hero lessons + production-style agentic RAG, hierarchical RAG and SQL agent apps"
 requires-python = ">=3.12"
+# Exact pins, verified working together on 2026-11-12 (latest releases on PyPI that day).
+# Lesson 19 pins LangGraph behavior, so upgrade deliberately: bump, run `hatch run test`, read failures.
 dependencies = [
-  "langgraph>=1.2",
-  "langchain>=1.5",
-  "langchain-anthropic",
-  "langgraph-checkpoint-sqlite",
-  "langchain-text-splitters",
-  "numpy",
-  "python-dotenv",
-  "fastapi",
-  "uvicorn",
+  "langgraph==1.2.21",
+  "langchain==1.5.0",
+  "langchain-core==1.8.0",
+  "langchain-anthropic==1.7.10",
+  "langgraph-checkpoint-sqlite==3.1.3",
+  "langchain-text-splitters==1.1.3",
+  "numpy==2.5.4",
+  "python-dotenv==1.2.4",
+  "pydantic==2.14.3",
+  "fastapi==0.162.5",
+  "uvicorn==0.54.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "httpx"]
-openai = ["langchain-openai"]          # real embeddings (Anthropic has no embeddings API)
-postgres = ["langgraph-checkpoint-postgres", "psycopg[binary,pool]"]
+# httpx2 (not httpx): Starlette 1.10's TestClient prefers it and deprecates httpx.
+dev = [
+  "pytest==9.2.0",
+  "pytest-cov==7.1.0",
+  "httpx2==2.16.0",
+  "ruff==0.17.5",
+  "ty==0.0.102",
+]
+openai = ["langchain-openai==1.7.4"]   # real embeddings (Anthropic has no embeddings API)
+postgres = ["langgraph-checkpoint-postgres==3.2.0", "psycopg[binary,pool]==3.3.9"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["rag_prod", "westeros_rag", "sql_agent"]
 
+# ---------------------------------------------------------------- hatch environments
+[tool.hatch.envs.default]
+features = ["dev"]
+
+[tool.hatch.envs.default.scripts]
+test = "pytest -q {args}"
+cov = "pytest -q --cov --cov-report=term-missing {args}"
+live = "pytest -q -m live {args}"          # needs a real API key; see tests/test_live.py
+lint = "ruff check ."
+fmt = "ruff check --fix ."
+typecheck = "ty check"
+check = ["lint", "typecheck", "cov"]
+
+# ---------------------------------------------------------------- pytest / coverage
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["live: calls a real LLM provider (opt-in: needs ANTHROPIC_API_KEY; run with -m live)"]
+addopts = "-m 'not live'"
+
+[tool.coverage.run]
+source = ["rag_prod", "westeros_rag", "sql_agent", "lessons", "capstone"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+skip_covered = true
+exclude_also = ["if __name__ == .__main__.:"]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = [".rag_index", ".westeros_index"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+# E501: lessons use aligned trailing comments and long teaching strings; wrapping them hurts readability.
+ignore = ["E501", "RUF001", "RUF002", "RUF003"]   # RUF00x: lessons deliberately use unicode arrows/dashes
+
+[tool.ruff.lint.isort]
+known-first-party = ["rag_prod", "westeros_rag", "sql_agent"]
+
+# ---------------------------------------------------------------- ty (Astral) - strictest settings
+# Every rule is an error (`all` is ty's wildcard) and the strict analysis switches are on.
+# mypy is intentionally not used in this repo.
+[tool.ty.environment]
+python-version = "3.12"
+extra-paths = ["lessons"]              # lessons/common.py + offline_llm.py are put on sys.path at runtime
+
+[tool.ty.src]
+include = ["rag_prod", "westeros_rag", "sql_agent", "lessons", "capstone", "tests"]
+
+[tool.ty.analysis]
+allowed-unresolved-imports = ["langchain_openai"]   # optional extra: pip install -e ".[openai]"
+respect-type-ignore-comments = false   # only `# ty: ignore[...]` suppresses, and it is itself checked
+strict-equality-semantics = true
+strict-generic-narrowing = true
+return-type-inference = "always"
+
+[tool.ty.terminal]
+error-on-warning = true
+
+[tool.ty.rules]
+all = "error"

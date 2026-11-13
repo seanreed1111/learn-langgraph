@@ -2,12 +2,12 @@
 
 Layers:  parsing -> lint gate -> enrichment -> index -> retrieval invariants -> guardrails -> graph -> API -> evals
 """
-
 import os
 import shutil
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import override
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -83,7 +83,7 @@ def test_section_metadata_comment_and_inheritance(corpus):
 
 def test_links_are_extracted_resolved_and_stripped_for_indexing(corpus):
     links = corpus.sections["trial_by_combat#capital-cases"].links
-    assert any(corpus.resolve(l, "trial_by_combat") == "crimes_and_punishments#murder" for l in links)
+    assert any(corpus.resolve(link, "trial_by_combat") == "crimes_and_punishments#murder" for link in links)
     assert strip_links("see [trial by combat](trial_by_combat.md#x) now") == "see trial by combat now"
     assert "](" not in corpus.unit_text("trial_by_combat#when-it-may-be-demanded")
 
@@ -129,6 +129,7 @@ def test_enrichment_is_cached_and_validated(corpus, tmp_path):
 
 def test_enrichment_drops_themes_outside_the_controlled_vocabulary(corpus, tmp_path):
     class Sloppy(OfflineLawModel):
+        @override
         def with_structured_output(self, schema, **kw):
             return type("S", (), {"invoke": lambda s, m, *a, **k: SectionMeta(summary="x" * 900, themes=["trial", "made_up", "treason", "oath", "mercy"])})()
 

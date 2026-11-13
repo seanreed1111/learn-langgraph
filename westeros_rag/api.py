@@ -19,11 +19,12 @@ from __future__ import annotations
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException
-from pydantic import BaseModel, Field
-
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.sqlite import SqliteSaver
+from pydantic import BaseModel, Field
 
 from rag_prod.observability import logger, setup_logging
 from westeros_rag.config import ROLES, LawContext, WSettings
@@ -43,14 +44,14 @@ class ChatResponse(BaseModel):
     thread_id: str
     status: str
     answer: str
-    citations: list[dict]
+    citations: list[dict[str, Any]]
     flags: list[str]
     disclaimer: str = DISCLAIMER
 
 
 def authenticate(api_key: str | None) -> LawContext:
     role = API_KEYS.get(api_key or "")
-    if not role:
+    if role is None:
         raise HTTPException(status_code=401, detail="invalid or missing API key")
     return ROLES[role]
 
@@ -70,11 +71,11 @@ def create_app(settings: WSettings | None = None) -> FastAPI:
     app = FastAPI(title="Westeros Law RAG", lifespan=lifespan)
 
     @app.get("/healthz")
-    def healthz() -> dict:
+    def healthz() -> dict[str, Any]:
         return {"ok": True}
 
     @app.get("/readyz")
-    def readyz() -> dict:
+    def readyz() -> dict[str, Any]:
         if getattr(app.state, "pipe", None) is None:
             raise HTTPException(status_code=503, detail="not ready")
         return {"ready": True, "documents": len(app.state.pipe.corpus.docs)}
@@ -83,18 +84,18 @@ def create_app(settings: WSettings | None = None) -> FastAPI:
     def chat(req: ChatRequest, x_api_key: str | None = Header(default=None)) -> ChatResponse:
         ctx = authenticate(x_api_key)
         thread, request_id = req.thread_id or uuid.uuid4().hex[:16], uuid.uuid4().hex
-        config = {"configurable": {"thread_id": f"{ctx.user_id}:{thread}"}, "recursion_limit": 40,
+        config: RunnableConfig = {"configurable": {"thread_id": f"{ctx.user_id}:{thread}"}, "recursion_limit": 40,
                   "metadata": {"user_id": ctx.user_id, "request_id": request_id}, "tags": ["westeros-api"]}
         try:
             out = app.state.pipe.graph.invoke({"messages": [{"role": "user", "content": req.question}]}, config, context=ctx)
-        except Exception:
+        except Exception:  # details are logged, never leaked to the client
             logger.exception("chat_failed", extra={"fields": {"request_id": request_id}})
-            raise HTTPException(status_code=502, detail=f"upstream error (request_id={request_id})")
+            raise HTTPException(status_code=502, detail=f"upstream error (request_id={request_id})") from None
         return ChatResponse(request_id=request_id, thread_id=thread, status=out["status"], answer=out["answer"],
                             citations=out["citations"], flags=out.get("flags", []))
 
     @app.get("/tree")
-    def tree(x_api_key: str | None = Header(default=None)) -> list[dict]:
+    def tree(x_api_key: str | None = Header(default=None)) -> list[dict[str, Any]]:
         ctx, corpus = authenticate(x_api_key), app.state.pipe.corpus
         return [
             {"doc_id": d.doc_id, "title": d.title, "sections": [s.section_id for s in d.sections if s.level == 2]}
@@ -102,7 +103,7 @@ def create_app(settings: WSettings | None = None) -> FastAPI:
         ]
 
     @app.get("/sections/{doc_id}/{slug}")  # NOT "{doc}#{slug}": a URL #fragment is never sent to the server
-    def section(doc_id: str, slug: str, x_api_key: str | None = Header(default=None)) -> dict:
+    def section(doc_id: str, slug: str, x_api_key: str | None = Header(default=None)) -> dict[str, Any]:
         ctx, corpus = authenticate(x_api_key), app.state.pipe.corpus
         unit_id = f"{doc_id}#{slug}"
         if unit_id not in corpus.sections or corpus.access(unit_id) not in ctx.access_levels:

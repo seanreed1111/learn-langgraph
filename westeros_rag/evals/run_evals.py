@@ -23,6 +23,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from westeros_rag.config import ROLES
 from westeros_rag.retrieval import HierarchicalRetriever
@@ -47,7 +48,7 @@ class RetrievalResult:
     missing: list[str] = field(default_factory=list)
 
 
-def eval_retrieval(retriever: HierarchicalRetriever, cases: list[dict] | None = None) -> list[RetrievalResult]:
+def eval_retrieval(retriever: HierarchicalRetriever, cases: list[dict[str, Any]] | None = None) -> list[RetrievalResult]:
     results = []
     for c in cases or json.loads(RETRIEVAL_CASES.read_text(encoding="utf-8")):
         # `queries` mirrors what the planner would produce for a multi-part question (one search per sub-question)
@@ -73,7 +74,7 @@ def eval_retrieval(retriever: HierarchicalRetriever, cases: list[dict] | None = 
     return results
 
 
-def summarize_retrieval(results: list[RetrievalResult]) -> dict:
+def summarize_retrieval(results: list[RetrievalResult]) -> dict[str, Any]:
     def mean(xs):
         xs = [x for x in xs if x is not None]
         return round(sum(xs) / len(xs), 3) if xs else None
@@ -100,7 +101,7 @@ class E2EResult:
     latency_s: float
 
 
-def eval_e2e(pipe, cases: list[dict] | None = None) -> list[E2EResult]:
+def eval_e2e(pipe, cases: list[dict[str, Any]] | None = None) -> list[E2EResult]:
     results = []
     for c in cases or json.loads(E2E_CASES.read_text(encoding="utf-8")):
         t0 = time.perf_counter()
@@ -130,9 +131,9 @@ def eval_e2e(pipe, cases: list[dict] | None = None) -> list[E2EResult]:
     return results
 
 
-def summarize_e2e(results: list[E2EResult], cases: list[dict] | None = None) -> dict:
+def summarize_e2e(results: list[E2EResult], cases: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     cases = cases or json.loads(E2E_CASES.read_text(encoding="utf-8"))
-    inj = [r for r, c in zip(results, cases) if c.get("flags_contain") == "input:injection"]
+    inj = [r for r, c in zip(results, cases, strict=True) if c.get("flags_contain") == "input:injection"]
     return {
         "cases": len(results), "pass_rate": round(sum(r.ok for r in results) / len(results), 3),
         "leaks": sum(any(p.startswith("LEAK") for p in r.problems) for r in results),
@@ -141,8 +142,8 @@ def summarize_e2e(results: list[E2EResult], cases: list[dict] | None = None) -> 
     }
 
 
-def gate(retrieval: dict, e2e: dict) -> bool:
-    return (
+def gate(retrieval: dict[str, Any], e2e: dict[str, Any]) -> bool:
+    return bool(
         (retrieval["recall"] or 0) >= THRESHOLDS["retrieval_recall"]
         and (retrieval["mrr"] or 0) >= THRESHOLDS["retrieval_mrr"]
         and e2e["pass_rate"] >= THRESHOLDS["e2e_pass_rate"]

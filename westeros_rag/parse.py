@@ -22,6 +22,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import override
 
 from rag_prod.ingest import parse_front_matter  # same tiny front-matter parser as lesson 14
 from westeros_rag.config import KNOWN_ACCESS, REGIONS
@@ -86,7 +87,7 @@ def parse_markdown(raw: str, path: Path) -> ParsedDoc:
     doc_id = meta.get("doc_id", path.stem)
     sections: list[Section] = []
     stack: list[Section] = []
-    slugs: Counter = Counter()
+    slugs: Counter[str] = Counter()
     in_fence = False
     pending_meta_for: Section | None = None
     buf: list[str] = []
@@ -147,7 +148,7 @@ class Corpus:
         self.duplicate_doc_ids = [i for i, c in Counter(d.doc_id for d in docs).items() if c > 1]
 
     @classmethod
-    def load(cls, directory: Path) -> "Corpus":
+    def load(cls, directory: Path) -> Corpus:
         return cls([parse_markdown(p.read_text(encoding="utf-8"), p) for p in sorted(directory.glob("*.md"))])
 
     # ---- attributes with inheritance: section meta overrides doc front matter
@@ -161,12 +162,12 @@ class Corpus:
     # ---- units (context granularity)
     def unit_id(self, section_id: str) -> str:
         s = self.sections[section_id]
-        while s.level > 2 and s.parent_id:
+        while s.level > 2 and bool(s.parent_id):
             s = self.sections[s.parent_id]
         return s.section_id
 
     def units(self, doc_id: str | None = None) -> list[Section]:
-        docs = [self.docs[doc_id]] if doc_id else list(self.docs.values())
+        docs = [self.docs[doc_id]] if bool(doc_id) else list(self.docs.values())
         return [s for d in docs for s in d.sections if s.level <= 2]
 
     def subtree(self, section_id: str) -> list[Section]:
@@ -195,7 +196,7 @@ class Corpus:
         doc = self.docs.get(doc_id)
         if not doc:
             return None
-        if not link.target_anchor:
+        if not bool(link.target_anchor):
             return doc.sections[0].section_id
         sid = f"{doc_id}#{link.target_anchor}"
         return sid if sid in self.sections else None
@@ -206,7 +207,7 @@ class Corpus:
         for s in self.unit_members(unit_id):
             for link in s.links:
                 target = self.resolve(link, s.doc_id)
-                if target and self.unit_id(target) != unit_id:
+                if bool(target) and self.unit_id(target) != unit_id:
                     seen.setdefault(self.unit_id(target), None)
         return list(seen)
 
@@ -215,7 +216,7 @@ class Corpus:
         for s in self.sections.values():
             for link in s.links:
                 target = self.resolve(link, s.doc_id)
-                if target:
+                if bool(target):
                     inbound[target].add(s.section_id)
         return inbound
 
@@ -227,6 +228,7 @@ class Issue:
     where: str
     detail: str
 
+    @override
     def __str__(self) -> str:
         return f"[{self.kind}] {self.where}: {self.detail}"
 
@@ -244,10 +246,10 @@ def lint(corpus: Corpus) -> list[Issue]:
                 issues.append(Issue("missing_front_matter", where, f"missing '{key}'"))
         if doc.meta.get("doc_id", doc.path.stem) != doc.path.stem:
             issues.append(Issue("doc_id_mismatch", where, "doc_id must equal the file name"))
-        if doc.meta.get("access") and doc.meta["access"] not in KNOWN_ACCESS:
+        if bool(doc.meta.get("access")) and doc.meta["access"] not in KNOWN_ACCESS:
             issues.append(Issue("unknown_access", where, doc.meta["access"]))
         j = doc.meta.get("jurisdiction")
-        if j and j != "all" and j not in REGIONS:
+        if bool(j) and j != "all" and j not in REGIONS:
             issues.append(Issue("unknown_jurisdiction", where, j))
         h1 = [s for s in doc.sections if s.level == 1]
         if len(h1) != 1:
@@ -259,10 +261,10 @@ def lint(corpus: Corpus) -> list[Issue]:
             prev = s.level
             if not s.text and not s.children:
                 issues.append(Issue("empty_section", s.section_id, "heading with no text"))
-            if s.meta.get("jurisdiction") and s.meta["jurisdiction"] not in REGIONS:
+            if bool(s.meta.get("jurisdiction")) and s.meta["jurisdiction"] not in REGIONS:
                 issues.append(Issue("unknown_jurisdiction", s.section_id, s.meta["jurisdiction"]))
             for link in s.links:
-                if link.target_doc and link.target_doc not in corpus.docs:
+                if bool(link.target_doc) and link.target_doc not in corpus.docs:
                     issues.append(Issue("broken_link", s.section_id, f"unknown document '{link.target_doc}'"))
                 elif corpus.resolve(link, s.doc_id) is None:
                     issues.append(Issue("broken_anchor", s.section_id, f"'{link.target_doc or ''}#{link.target_anchor}' not found"))

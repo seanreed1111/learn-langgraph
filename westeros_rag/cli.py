@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 
 from westeros_rag.config import ROLES, WSettings
@@ -50,7 +49,7 @@ def cmd_ask(args) -> int:
     print(f"[{out['status']}] {out['answer']}")
     for c in out["citations"]:
         print(f"  cite [{c['n']}] {c['section']}  ->  {c['link']}  ({c['kind']})")
-    print(f"  trace: {' > '.join(out['trace'])}\n  flags: {out.get('flags')}\n  {out['disclaimer'] if 'disclaimer' in out else ''}")
+    print(f"  trace: {' > '.join(out['trace'])}\n  flags: {out.get('flags')}\n  {out.get('disclaimer', '')}")
     return 0
 
 
@@ -66,12 +65,20 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("lint").set_defaults(fn=cmd_lint)
     sub.add_parser("ingest").set_defaults(fn=cmd_ingest)
-    t = sub.add_parser("tree"); t.add_argument("--role", default="commoner", choices=ROLES); t.set_defaults(fn=cmd_tree)
-    a = sub.add_parser("ask"); a.add_argument("question"); a.add_argument("--role", default="commoner", choices=ROLES); a.set_defaults(fn=cmd_ask)
-    p = sub.add_parser("passages"); p.add_argument("query"); p.add_argument("--role", default="commoner", choices=ROLES)
-    p.add_argument("--jurisdiction", default=None); p.set_defaults(fn=cmd_passages)
+    t = sub.add_parser("tree")
+    t.add_argument("--role", default="commoner", choices=ROLES)
+    t.set_defaults(fn=cmd_tree)
+    a = sub.add_parser("ask")
+    a.add_argument("question")
+    a.add_argument("--role", default="commoner", choices=ROLES)
+    a.set_defaults(fn=cmd_ask)
+    p = sub.add_parser("passages")
+    p.add_argument("query")
+    p.add_argument("--role", default="commoner", choices=ROLES)
+    p.add_argument("--jurisdiction", default=None)
+    p.set_defaults(fn=cmd_passages)
     args = ap.parse_args(argv)
-    return args.fn(args)
+    return int(args.fn(args))
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 SCHEMA = """
 CREATE TABLE customers (
@@ -65,7 +66,7 @@ _ALLOWED = {sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION,
             sqlite3.SQLITE_RECURSIVE}
 
 
-def _read_only_authorizer(action, arg1, arg2, db_name, source):  # noqa: ANN001
+def _read_only_authorizer(action, arg1, arg2, db_name, source):
     return sqlite3.SQLITE_OK if action in _ALLOWED else sqlite3.SQLITE_DENY
 
 
@@ -92,7 +93,7 @@ def schema_text(path: str | Path) -> dict[str, str]:
         con.close()
 
 
-def run_read(con: sqlite3.Connection, sql: str) -> tuple[list[str], list[tuple]]:
+def run_read(con: sqlite3.Connection, sql: str) -> tuple[list[str], list[tuple[Any, ...]]]:
     cur = con.execute(sql)
     cols = [d[0] for d in cur.description or []]
     return cols, cur.fetchall()

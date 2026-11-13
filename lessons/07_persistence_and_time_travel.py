@@ -17,15 +17,14 @@ Checkpointers: InMemorySaver (dev/tests), SqliteSaver (local), PostgresSaver (pr
 
 Run:  python lessons/07_persistence_and_time_travel.py
 """
-
 import operator
-from typing import Annotated
+from typing import Annotated, Any
 
-from typing_extensions import TypedDict
-
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
+from typing_extensions import TypedDict
 
 
 class State(TypedDict):
@@ -33,13 +32,13 @@ class State(TypedDict):
     reply: str
 
 
-def listen_and_reply(state: State) -> dict:
+def listen_and_reply(state: State) -> dict[str, Any]:
     # `heard` accumulates across invoke() calls because the thread's state is persisted.
     return {"reply": f"I've heard {len(state['heard'])} message(s): {state['heard']}"}
 
 
 def build(checkpointer):
-    b = StateGraph(State)
+    b = StateGraph(State)  # ty: ignore[invalid-argument-type]
     b.add_node("reply", listen_and_reply)
     b.add_edge(START, "reply")
     b.add_edge("reply", END)
@@ -50,8 +49,8 @@ if __name__ == "__main__":
     graph = build(InMemorySaver())
 
     # --- threads isolate conversations --------------------------------------
-    alice = {"configurable": {"thread_id": "alice"}}
-    bob = {"configurable": {"thread_id": "bob"}}
+    alice: RunnableConfig = {"configurable": {"thread_id": "alice"}}
+    bob: RunnableConfig = {"configurable": {"thread_id": "bob"}}
     graph.invoke({"heard": ["hi"]}, alice)
     out = graph.invoke({"heard": ["my name is Ada"]}, alice)
     print("alice:", out["reply"])
@@ -66,6 +65,7 @@ if __name__ == "__main__":
     print("\nHISTORY (newest first):")
     history = list(graph.get_state_history(alice))
     for s in history:
+        assert s.metadata is not None
         print(f"  step={s.metadata['step']:>2} next={s.next} heard={s.values.get('heard')}")
 
     # --- time travel: fork from an old checkpoint -----------------------------
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     # --- durable persistence with SQLite ------------------------------------
     with SqliteSaver.from_conn_string("lesson07_checkpoints.sqlite") as saver:
         g2 = build(saver)
-        cfg = {"configurable": {"thread_id": "persisted"}}
+        cfg: RunnableConfig = {"configurable": {"thread_id": "persisted"}}
         print("\nsqlite     :", g2.invoke({"heard": ["remember me"]}, cfg)["reply"])
     # Re-open the file (simulating a process restart): state is still there.
     with SqliteSaver.from_conn_string("lesson07_checkpoints.sqlite") as saver:

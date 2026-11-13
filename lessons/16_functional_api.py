@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.func import entrypoint, task
 from langgraph.types import Command, RetryPolicy, interrupt
@@ -135,13 +136,13 @@ if __name__ == "__main__":
 
     print("2) loop:", refine_loop.invoke("langgraph"))
 
-    cfg = {"configurable": {"thread_id": "order-1"}}
+    cfg: RunnableConfig = {"configurable": {"thread_id": "order-1"}}
     out = checkout.invoke(19.99, cfg)
     print("3) paused:", out["__interrupt__"][0].value)
     print("   resumed:", checkout.invoke(Command(resume="yes"), cfg))
     print("   charge_card ran", CALLS["charge_card"], "time(s)  <- not re-run on resume")
 
-    cfg2 = {"configurable": {"thread_id": "acct"}}
+    cfg2: RunnableConfig = {"configurable": {"thread_id": "acct"}}
     print("4) memory:", [running_total.invoke(n, cfg2)["total"] for n in (5, 10, 1)])
 
     print("5) retry:", with_retry.invoke(1), f"after {CALLS['flaky_api']} attempts")

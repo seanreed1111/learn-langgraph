@@ -1,8 +1,9 @@
 """Lessons 16-18: functional API, durable execution, Pregel runtime."""
-
 import importlib
 import sys
 from pathlib import Path
+
+from langchain_core.runnables import RunnableConfig
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "lessons"))
@@ -24,7 +25,7 @@ def test_functional_parallel_and_loop():
 def test_functional_task_not_rerun_on_resume():
     m = load("16_functional_api")
     m.CALLS.pop("charge_card", None)
-    cfg = {"configurable": {"thread_id": "t16"}}
+    cfg: RunnableConfig = {"configurable": {"thread_id": "t16"}}
     paused = m.checkout.invoke(5.0, cfg)
     assert "__interrupt__" in paused
     out = m.checkout.invoke(Command(resume="yes"), cfg)
@@ -33,7 +34,7 @@ def test_functional_task_not_rerun_on_resume():
 
 def test_functional_previous_memory_and_retry():
     m = load("16_functional_api")
-    cfg = {"configurable": {"thread_id": "acct16"}}
+    cfg: RunnableConfig = {"configurable": {"thread_id": "acct16"}}
     assert [m.running_total.invoke(n, cfg)["total"] for n in (5, 10, 1)] == [5, 15, 16]
     m.FLAKY["fails_left"] = 2
     assert m.with_retry.invoke(1) == 2

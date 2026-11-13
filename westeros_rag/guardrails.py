@@ -86,7 +86,7 @@ class LeakDetector:
             acc = doc.meta.get("access", "internal")
             text = " ".join(corpus.unit_text(s.section_id) for s in doc.sections if s.level <= 2)
             self._by_access.setdefault(acc, set()).update(self._shingles(text))
-        self._cache: dict[frozenset, set[str]] = {}
+        self._cache: dict[frozenset[str], set[str]] = {}
 
     def _shingles(self, text: str) -> set[str]:
         toks = re.findall(r"[a-z0-9]+", text.lower())

@@ -19,7 +19,7 @@ from langchain_core.documents import Document
 from rag_prod.config import Settings
 from rag_prod.ingest import Index
 
-_STOP = set("the a an and or of to in on for with is are was were be it this that what how do does i my me you we".split())
+_STOP = set(["the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with", "is", "are", "was", "were", "be", "it", "this", "that", "what", "how", "do", "does", "i", "my", "me", "you", "we"])
 
 
 def tokenize(text: str) -> list[str]:
@@ -33,7 +33,7 @@ class BM25:
         self.tf = [Counter(tokenize(d.page_content)) for d in docs]
         self.len = [sum(c.values()) for c in self.tf]
         self.avg = (sum(self.len) / len(docs)) if docs else 0.0
-        df: Counter = Counter()
+        df: Counter[str] = Counter()
         for c in self.tf:
             df.update(c.keys())
         n = len(docs)
@@ -42,7 +42,7 @@ class BM25:
     def search(self, query: str, k: int) -> list[tuple[Document, float]]:
         q = tokenize(query)
         scored = []
-        for doc, tf, ln in zip(self.docs, self.tf, self.len):
+        for doc, tf, ln in zip(self.docs, self.tf, self.len, strict=True):
             s = 0.0
             for t in q:
                 if t in tf:
@@ -58,8 +58,9 @@ def rrf(rankings: list[list[Document]], k: int = 60) -> list[tuple[Document, flo
     by_id: dict[str, Document] = {}
     for ranking in rankings:
         for rank, doc in enumerate(ranking, start=1):
-            scores[doc.id] = scores.get(doc.id, 0.0) + 1.0 / (k + rank)
-            by_id[doc.id] = doc
+            doc_id = doc.id or ""
+            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
+            by_id[doc_id] = doc
     return sorted(((by_id[i], s) for i, s in scores.items()), key=lambda x: -x[1])
 
 

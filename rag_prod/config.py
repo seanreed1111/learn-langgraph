@@ -36,7 +36,7 @@ class Settings:
     llm_max_retries: int = 2
 
     @classmethod
-    def from_env(cls) -> "Settings":
+    def from_env(cls) -> Settings:
         def env_int(name: str, default: int) -> int:
             return int(os.getenv(name, default))
 

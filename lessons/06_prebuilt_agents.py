@@ -13,14 +13,14 @@ need custom control flow. Interviewers love "when would you NOT use create_agent
 Run:  python lessons/06_prebuilt_agents.py
 """
 
+from typing import Any
+
+from common import banner, get_model, tool_call_msg
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import tool
-
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
-
-from common import banner, get_model, tool_call_msg
 
 
 @tool
@@ -43,11 +43,11 @@ def fresh_model():
 model_a = fresh_model()
 
 
-def llm(state: MessagesState) -> dict:
+def llm(state: MessagesState) -> dict[str, Any]:
     return {"messages": [model_a.invoke(state["messages"])]}
 
 
-b = StateGraph(MessagesState)
+b = StateGraph(MessagesState)  # ty: ignore[invalid-argument-type]
 b.add_node("llm", llm)
 b.add_node("tools", ToolNode(tools))  # handles tool errors + parallel calls for you
 b.add_edge(START, "llm")
@@ -62,8 +62,8 @@ if __name__ == "__main__":
 
     # ---- Level 2: create_agent ------------------------------------------
     banner("create_agent")
-    # `model` can be a model object OR a string like "anthropic:claude-sonnet-4-6".
-    agent = create_agent(
+    # `model` can be a model object OR a string like "anthropic:<model-id>".
+    agent = create_agent(  # ty: ignore[no-matching-overload]
         model=fresh_model(),
         tools=tools,
         system_prompt="You are a concise weather bot.",

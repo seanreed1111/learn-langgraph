@@ -8,12 +8,14 @@ import functools
 import json
 import logging
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import override
 
 logger = logging.getLogger("rag")
 
 
 class JsonFormatter(logging.Formatter):
+    @override
     def format(self, record: logging.LogRecord) -> str:
         payload = {"ts": self.formatTime(record), "level": record.levelname, "msg": record.getMessage()}
         payload.update(getattr(record, "fields", {}))
@@ -28,19 +30,19 @@ def setup_logging(level: int = logging.INFO) -> None:
     logger.propagate = False
 
 
-def timed(node_name: str) -> Callable:
+def timed[**P, R](node_name: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorator for graph nodes: logs duration, thread id and success/failure."""
 
-    def deco(fn: Callable) -> Callable:
+    def deco(fn: Callable[P, R]) -> Callable[P, R]:
         @functools.wraps(fn)  # keeps the signature so LangGraph can still inject `runtime`/`config`
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             start = time.perf_counter()
             thread_id = None
             try:
                 from langgraph.config import get_config
 
                 thread_id = get_config().get("configurable", {}).get("thread_id")
-            except Exception:  # noqa: BLE001 - observability must never break the request
+            except Exception:
                 pass
             try:
                 result = fn(*args, **kwargs)

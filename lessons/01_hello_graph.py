@@ -14,9 +14,10 @@ next nodes are scheduled. Execution stops when nothing is left to run (END).
 Run:  python lessons/01_hello_graph.py
 """
 
-from typing_extensions import TypedDict
+from typing import Any
 
 from langgraph.graph import END, START, StateGraph
+from typing_extensions import TypedDict
 
 
 # 1) STATE: describe the shape of the data flowing through the graph.
@@ -27,16 +28,16 @@ class State(TypedDict):
 
 
 # 2) NODES: each returns ONLY the keys it wants to update (not the whole state).
-def make_greeting(state: State) -> dict:
+def make_greeting(state: State) -> dict[str, Any]:
     return {"greeting": f"Hello, {state['name']}!"}
 
 
-def make_shout(state: State) -> dict:
+def make_shout(state: State) -> dict[str, Any]:
     return {"shout": state["greeting"].upper()}
 
 
 # 3) BUILD: register nodes, wire edges, compile.
-builder = StateGraph(State)
+builder = StateGraph(State)  # ty: ignore[invalid-argument-type]
 builder.add_node("make_greeting", make_greeting)
 builder.add_node("make_shout", make_shout)
 builder.add_edge(START, "make_greeting")  # START is a virtual entry node

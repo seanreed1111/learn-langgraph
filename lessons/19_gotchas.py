@@ -16,22 +16,22 @@ import logging
 import operator
 import threading
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, override
 
-from langchain_core.messages import AIMessage, HumanMessage
 from langchain.tools import ToolRuntime
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
-from typing_extensions import TypedDict
-
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.prebuilt import ToolNode
 from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.prebuilt import ToolNode
 from langgraph.types import Command, interrupt
+from typing_extensions import TypedDict
 
 
-def cfg(thread: str, **extra: Any) -> dict:
-    return {"configurable": {"thread_id": thread}, **extra}
+def cfg(thread: str, **extra: Any) -> RunnableConfig:
+    return RunnableConfig(configurable={"thread_id": thread}, **extra)
 
 
 # =========================================================== 1. mutating state in place
@@ -39,20 +39,20 @@ class ItemsState(TypedDict):
     items: list[str]
 
 
-def _mutating(s: ItemsState) -> dict:
+def _mutating(s: ItemsState) -> dict[str, Any]:
     s["items"].append("x")  # BAD: edits the object, declares no update
     return {}
 
 
-def _returning(s: ItemsState) -> dict:
+def _returning(s: ItemsState) -> dict[str, Any]:
     return {"items": s["items"] + ["x"]}  # GOOD: new value, declared update
 
 
-def gotcha_mutation() -> dict:
+def gotcha_mutation() -> dict[str, Any]:
     out = {}
     for name, node in (("bad", _mutating), ("good", _returning)):
-        g = StateGraph(ItemsState)
-        g.add_node("n", node)
+        g = StateGraph(ItemsState)  # ty: ignore[invalid-argument-type]
+        g.add_node("n", node)  # ty: ignore[invalid-argument-type]
         g.add_edge(START, "n")
         g.add_edge("n", END)
         graph = g.compile(checkpointer=InMemorySaver())
@@ -67,19 +67,19 @@ def gotcha_mutation() -> dict:
 
 
 # =========================================================== 2. resending history / no reducer
-def _bot(s: MessagesState) -> dict:
+def _bot(s: MessagesState) -> dict[str, Any]:
     return {"messages": [AIMessage(f"reply{len(s['messages'])}")]}
 
 
 def _chat():
-    g = StateGraph(MessagesState)
-    g.add_node("bot", _bot)
+    g = StateGraph(MessagesState)  # ty: ignore[invalid-argument-type]
+    g.add_node("bot", _bot)  # ty: ignore[invalid-argument-type]
     g.add_edge(START, "bot")
     g.add_edge("bot", END)
     return g.compile(checkpointer=InMemorySaver())
 
 
-def gotcha_resend_history() -> dict:
+def gotcha_resend_history() -> dict[str, Any]:
     graph = _chat()
     graph.invoke({"messages": [HumanMessage("hi")]}, cfg("a"))
     # BAD: the frontend rebuilds messages from plain text: new objects, NO ids
@@ -95,10 +95,10 @@ def gotcha_resend_history() -> dict:
 
 def gotcha_overwrite_messages() -> list[str]:
     class S(TypedDict):
-        messages: list  # BAD: plain list = last-writer-wins, no add_messages reducer
+        messages: list[Any]  # BAD: plain list = last-writer-wins, no add_messages reducer
 
-    g = StateGraph(S)
-    g.add_node("n", lambda s: {"messages": [AIMessage("hi")]})
+    g = StateGraph(S)  # ty: ignore[invalid-argument-type]
+    g.add_node("n", lambda s: {"messages": [AIMessage("hi")]})  # ty: ignore[invalid-argument-type]
     g.add_edge(START, "n")
     g.add_edge("n", END)
     out = g.compile().invoke({"messages": [HumanMessage("a"), HumanMessage("b")]})
@@ -111,15 +111,15 @@ class OutState(TypedDict):
     out: str
 
 
-def gotcha_typo_keys() -> dict:
-    g = StateGraph(OutState)
-    g.add_node("n", lambda s: {"ouput": "typo"})  # note the typo
+def gotcha_typo_keys() -> dict[str, Any]:
+    g = StateGraph(OutState)  # ty: ignore[invalid-argument-type]
+    g.add_node("n", lambda s: {"ouput": "typo"})  # note the typo  # ty: ignore[invalid-argument-type]
     g.add_edge(START, "n")
     g.add_edge("n", END)
     graph = g.compile()
     silently_ignored = graph.invoke({"q": "a", "out": ""})  # no error, `out` never set
-    g2 = StateGraph(OutState)
-    g2.add_node("n", lambda s: "oops")
+    g2 = StateGraph(OutState)  # ty: ignore[invalid-argument-type]
+    g2.add_node("n", lambda s: "oops")  # ty: ignore[invalid-argument-type]
     g2.add_edge(START, "n")
     g2.add_edge("n", END)
     try:
@@ -131,7 +131,7 @@ def gotcha_typo_keys() -> dict:
             "extra_input_key": graph.invoke({"q": "a", "out": "", "bogus": 1})}
 
 
-def assert_update_keys(update: dict, state_type: type) -> dict:
+def assert_update_keys(update: dict[str, Any], state_type: type) -> dict[str, Any]:
     """GOOD: a 4-line guard to use in node unit tests (see tests/test_gotchas.py)."""
     unknown = set(update) - set(state_type.__annotations__)
     assert not unknown, f"node returned keys that are not in state: {sorted(unknown)}"
@@ -145,33 +145,34 @@ class LogState(TypedDict):
 
 def gotcha_command_and_edge() -> list[str]:
     def a(s: LogState) -> Command[Literal["b"]]:
-        return Command(goto="b", update={"log": ["a"]})
+        return Command(goto="b", update={"log": ["a"]})  # ty: ignore[invalid-explicit-return]
 
-    g = StateGraph(LogState)
-    g.add_node("a", a)
-    g.add_node("b", lambda s: {"log": ["b"]})
-    g.add_node("c", lambda s: {"log": ["c"]})
+    g = StateGraph(LogState)  # ty: ignore[invalid-argument-type]
+    g.add_node("a", a)  # ty: ignore[invalid-argument-type]
+    g.add_node("b", lambda s: {"log": ["b"]})  # ty: ignore[invalid-argument-type]
+    g.add_node("c", lambda s: {"log": ["c"]})  # ty: ignore[invalid-argument-type]
     g.add_edge(START, "a")
     g.add_edge("a", "c")  # BAD: forgot that `a` already routes itself with Command
     g.add_edge("b", END)
     g.add_edge("c", END)
-    return g.compile().invoke({"log": []})["log"]  # both b AND c ran
+    return [str(item) for item in g.compile().invoke({"log": []})["log"]]  # both b AND c ran
 
 
 # =========================================================== 5. router typo ends the graph quietly
-def gotcha_router_typo() -> dict:
+def gotcha_router_typo() -> dict[str, Any]:
     records: list[str] = []
 
     class Capture(logging.Handler):
+        @override
         def emit(self, record: logging.LogRecord) -> None:
             records.append(record.getMessage())
 
     handler = Capture()
     logging.getLogger().addHandler(handler)
     try:
-        g = StateGraph(OutState)
-        g.add_node("n", lambda s: {})
-        g.add_node("answer", lambda s: {"out": "answered"})
+        g = StateGraph(OutState)  # ty: ignore[invalid-argument-type]
+        g.add_node("n", lambda s: {})  # ty: ignore[invalid-argument-type]
+        g.add_node("answer", lambda s: {"out": "answered"})  # ty: ignore[invalid-argument-type]
         g.add_edge(START, "n")
         g.add_conditional_edges("n", lambda s: "anwser")  # typo
         g.add_edge("answer", END)
@@ -179,9 +180,9 @@ def gotcha_router_typo() -> dict:
     finally:
         logging.getLogger().removeHandler(handler)
     # GOOD: the same typo with an explicit path list fails LOUDLY
-    g2 = StateGraph(OutState)
-    g2.add_node("n", lambda s: {})
-    g2.add_node("answer", lambda s: {"out": "answered"})
+    g2 = StateGraph(OutState)  # ty: ignore[invalid-argument-type]
+    g2.add_node("n", lambda s: {})  # ty: ignore[invalid-argument-type]
+    g2.add_node("answer", lambda s: {"out": "answered"})  # ty: ignore[invalid-argument-type]
     g2.add_edge(START, "n")
     g2.add_conditional_edges("n", lambda s: "anwser", ["answer", END])
     g2.add_edge("answer", END)
@@ -195,18 +196,18 @@ def gotcha_router_typo() -> dict:
 
 
 # =========================================================== 6. fan-in with separate edges
-def gotcha_fan_in() -> dict:
+def gotcha_fan_in() -> dict[str, Any]:
     def build(list_edge: bool) -> int:
         runs: list[int] = []
 
         class S(TypedDict):
             x: Annotated[list[str], operator.add]
 
-        g = StateGraph(S)
-        g.add_node("fast", lambda s: {"x": ["fast"]})
-        g.add_node("slow1", lambda s: {"x": ["slow1"]})
-        g.add_node("slow2", lambda s: {"x": ["slow2"]})
-        g.add_node("join", lambda s: runs.append(1) or {"x": ["join"]})
+        g = StateGraph(S)  # ty: ignore[invalid-argument-type]
+        g.add_node("fast", lambda s: {"x": ["fast"]})  # ty: ignore[invalid-argument-type]
+        g.add_node("slow1", lambda s: {"x": ["slow1"]})  # ty: ignore[invalid-argument-type]
+        g.add_node("slow2", lambda s: {"x": ["slow2"]})  # ty: ignore[invalid-argument-type]
+        g.add_node("join", lambda s: runs.append(1) or {"x": ["join"]})  # ty: ignore[invalid-argument-type]
         g.add_edge(START, "fast")
         g.add_edge(START, "slow1")
         g.add_edge("slow1", "slow2")
@@ -223,14 +224,14 @@ def gotcha_fan_in() -> dict:
 
 
 # =========================================================== 7. recursion limit default
-def gotcha_recursion_default() -> dict:
+def gotcha_recursion_default() -> dict[str, Any]:
     from langgraph._internal._config import DEFAULT_RECURSION_LIMIT
 
     class S(TypedDict):
         n: int
 
-    g = StateGraph(S)
-    g.add_node("inc", lambda s: {"n": s["n"] + 1})
+    g = StateGraph(S)  # ty: ignore[invalid-argument-type]
+    g.add_node("inc", lambda s: {"n": s["n"] + 1})  # ty: ignore[invalid-argument-type]
     g.add_edge(START, "inc")
     g.add_conditional_edges("inc", lambda s: "inc" if s["n"] < 10**9 else END, ["inc", END])
     graph = g.compile()
@@ -243,19 +244,19 @@ def gotcha_recursion_default() -> dict:
 
 
 # =========================================================== 8. try/except around interrupt
-def gotcha_swallowed_interrupt() -> dict:
+def gotcha_swallowed_interrupt() -> dict[str, Any]:
     class S(TypedDict):
         out: str
 
-    def bad(s: S) -> dict:
+    def bad(s: S) -> dict[str, Any]:
         try:
             answer = interrupt("approve?")
         except Exception:  # BAD: GraphInterrupt is an exception; this eats the pause
             answer = "auto-approved"
         return {"out": str(answer)}
 
-    g = StateGraph(S)
-    g.add_node("n", bad)
+    g = StateGraph(S)  # ty: ignore[invalid-argument-type]
+    g.add_node("n", bad)  # ty: ignore[invalid-argument-type]
     g.add_edge(START, "n")
     g.add_edge("n", END)
     out = g.compile(checkpointer=InMemorySaver()).invoke({"out": ""}, cfg("t"))
@@ -263,13 +264,13 @@ def gotcha_swallowed_interrupt() -> dict:
 
 
 # =========================================================== 9. new input on a paused thread
-def gotcha_abandoned_interrupt() -> dict:
+def gotcha_abandoned_interrupt() -> dict[str, Any]:
     class S(TypedDict):
         q: str
         out: str
 
-    g = StateGraph(S)
-    g.add_node("n", lambda s: {"out": f"{s['q']}:{interrupt('approve?')}"})
+    g = StateGraph(S)  # ty: ignore[invalid-argument-type]
+    g.add_node("n", lambda s: {"out": f"{s['q']}:{interrupt('approve?')}"})  # ty: ignore[invalid-argument-type]
     g.add_edge(START, "n")
     g.add_edge("n", END)
     graph = g.compile(checkpointer=InMemorySaver())
@@ -283,15 +284,15 @@ def gotcha_abandoned_interrupt() -> dict:
 
 
 # =========================================================== 10. un-checkpointable state
-def gotcha_unserializable_state() -> dict:
+def gotcha_unserializable_state() -> dict[str, Any]:
     class S(TypedDict):
         conn: object
 
-    def put_lock(s: S) -> dict:
+    def put_lock(s: S) -> dict[str, Any]:
         return {"conn": threading.Lock()}
 
-    g = StateGraph(S)
-    g.add_node("n", put_lock)
+    g = StateGraph(S)  # ty: ignore[invalid-argument-type]
+    g.add_node("n", put_lock)  # ty: ignore[invalid-argument-type]
     g.add_edge(START, "n")
     g.add_edge("n", END)
     graph = g.compile(checkpointer=InMemorySaver())
@@ -300,8 +301,8 @@ def gotcha_unserializable_state() -> dict:
         err = "no error"
     except TypeError as e:
         err = str(e)
-    no_checkpointer = StateGraph(S)
-    no_checkpointer.add_node("n", put_lock)
+    no_checkpointer = StateGraph(S)  # ty: ignore[invalid-argument-type]
+    no_checkpointer.add_node("n", put_lock)  # ty: ignore[invalid-argument-type]
     no_checkpointer.add_edge(START, "n")
     no_checkpointer.add_edge("n", END)
     works_without = "conn" in no_checkpointer.compile().invoke({"conn": None})
@@ -309,7 +310,7 @@ def gotcha_unserializable_state() -> dict:
 
 
 # =========================================================== 11. one thread_id for everyone
-def gotcha_shared_thread() -> dict:
+def gotcha_shared_thread() -> dict[str, Any]:
     graph = _chat()
     graph.invoke({"messages": [HumanMessage("my password is hunter2")]}, cfg("support"))  # alice
     bob = graph.invoke({"messages": [HumanMessage("hello")]}, cfg("support"))  # BAD: same id
@@ -337,22 +338,22 @@ def orders_good(runtime: ToolRuntime[Ctx]) -> str:
     return f"orders of {runtime.context.user_id}"
 
 
-def gotcha_tool_identity() -> dict:
-    def fake_llm(s: MessagesState) -> dict:  # a prompt-injected model asking for someone else's data
+def gotcha_tool_identity() -> dict[str, Any]:
+    def fake_llm(s: MessagesState) -> dict[str, Any]:  # a prompt-injected model asking for someone else's data
         return {"messages": [AIMessage("", tool_calls=[
             {"name": "orders_bad", "args": {"user_id": "victim"}, "id": "1"},
             {"name": "orders_good", "args": {"user_id": "victim"}, "id": "2"}])]}
 
-    g = StateGraph(MessagesState, context_schema=Ctx)
-    g.add_node("llm", fake_llm)
+    g = StateGraph(MessagesState, context_schema=Ctx)  # ty: ignore[invalid-argument-type]
+    g.add_node("llm", fake_llm)  # ty: ignore[invalid-argument-type]
     g.add_node("tools", ToolNode([orders_bad, orders_good]))
     g.add_edge(START, "llm")
     g.add_edge("llm", "tools")
     g.add_edge("tools", END)
     out = g.compile().invoke({"messages": [HumanMessage("show orders")]}, context=Ctx("alice"))
     results = {m.name: m.content for m in out["messages"][-2:]}
-    return {"schema_bad": sorted(orders_bad.tool_call_schema.model_json_schema()["properties"]),
-            "schema_good": sorted(orders_good.tool_call_schema.model_json_schema()["properties"]),
+    return {"schema_bad": sorted(orders_bad.tool_call_schema.model_json_schema()["properties"]),  # ty: ignore[missing-union-attribute]
+            "schema_good": sorted(orders_good.tool_call_schema.model_json_schema()["properties"]),  # ty: ignore[missing-union-attribute]
             "bad": results["orders_bad"], "good": results["orders_good"]}
 
 
@@ -362,8 +363,8 @@ def gotcha_compile_cost_ms() -> float:
 
     start = time.perf_counter()
     for _ in range(50):
-        g = StateGraph(MessagesState)
-        g.add_node("bot", _bot)
+        g = StateGraph(MessagesState)  # ty: ignore[invalid-argument-type]
+        g.add_node("bot", _bot)  # ty: ignore[invalid-argument-type]
         g.add_edge(START, "bot")
         g.add_edge("bot", END)
         g.compile()

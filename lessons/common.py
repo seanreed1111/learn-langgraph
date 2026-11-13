@@ -8,6 +8,7 @@ Put a key in `.env` (see .env.example) and the same code uses a real LLM.
 from __future__ import annotations
 
 import os
+from typing import Any, override
 
 from dotenv import load_dotenv
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
@@ -15,15 +16,36 @@ from langchain_core.messages import AIMessage
 
 load_dotenv()
 
-DEFAULT_MODEL = "anthropic:claude-sonnet-4-6"
+# Newest Sonnet-class model as of Nov 2026 (https://platform.claude.com/docs/en/models/overview).
+# This is the ONLY place the default model id lives. Override with LG_MODEL (any init_chat_model
+# string, e.g. "anthropic:claude-opus-5-5" or "anthropic:claude-haiku-5-5").
+DEFAULT_MODEL = "anthropic:claude-sonnet-5-5"
 
 
 def have_real_llm() -> bool:
-    return bool(
-        os.getenv("ANTHROPIC_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-        or os.getenv("GOOGLE_API_KEY")
-    )
+    """True only when we can actually build the configured model.
+
+    * ANTHROPIC_API_KEY alone -> the default Anthropic model works.
+    * Any other provider key requires an explicit LG_MODEL ("openai:<id>", ...), because the
+      default model is an Anthropic one and would fail with a confusing auth error.
+    """
+    if bool(os.getenv("ANTHROPIC_API_KEY")):
+        return True
+    return bool(os.getenv("LG_MODEL") and (os.getenv("OPENAI_API_KEY") or os.getenv("GOOGLE_API_KEY")))
+
+
+def model_name() -> str:
+    return os.getenv("LG_MODEL") or DEFAULT_MODEL
+
+
+def make_real_chat_model(**kwargs):
+    """init_chat_model for the configured model. Sampling params are left at provider defaults
+    (newer models restrict some of them); set LG_TEMPERATURE to opt in."""
+    from langchain.chat_models import init_chat_model
+
+    if bool(os.getenv("LG_TEMPERATURE")):
+        kwargs.setdefault("temperature", float(os.environ["LG_TEMPERATURE"]))
+    return init_chat_model(model_name(), **kwargs)
 
 
 class ScriptedChatModel(GenericFakeChatModel):
@@ -32,11 +54,12 @@ class ScriptedChatModel(GenericFakeChatModel):
     `bind_tools` is a no-op so it can stand in for a tool-calling model.
     """
 
-    def bind_tools(self, tools, **kwargs):  # noqa: ANN001
+    @override
+    def bind_tools(self, tools, **kwargs):
         return self
 
 
-def tool_call_msg(name: str, args: dict, call_id: str = "call_1") -> AIMessage:
+def tool_call_msg(name: str, args: dict[str, Any], call_id: str = "call_1") -> AIMessage:
     """Build an AIMessage that *asks* for a tool call (what a real LLM would emit)."""
     return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": call_id}])
 
@@ -47,9 +70,7 @@ def get_model(script: list[AIMessage] | None = None):
     `script` is only used offline: the sequence of AI replies the fake will give.
     """
     if have_real_llm():
-        from langchain.chat_models import init_chat_model
-
-        return init_chat_model(os.getenv("LG_MODEL", DEFAULT_MODEL), temperature=0)
+        return make_real_chat_model()
     script = script or [AIMessage(content="(offline fake model) Hello from the fake LLM!")]
     return ScriptedChatModel(messages=iter(script))
 

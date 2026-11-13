@@ -20,12 +20,11 @@ supervisor is an LLM call with structured output, e.g.
 Run:  python lessons/11_subgraphs_and_multi_agent.py
 """
 
-from typing import Literal
-
-from typing_extensions import TypedDict
+from typing import Any, Literal
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
+from typing_extensions import TypedDict
 
 
 class TeamState(TypedDict):
@@ -36,15 +35,15 @@ class TeamState(TypedDict):
 
 
 # -------------------------------------------- a reusable SUBGRAPH (researcher)
-def search(state: TeamState) -> dict:
+def search(state: TeamState) -> dict[str, Any]:
     return {"notes": f"3 sources found about '{state['task']}'"}
 
 
-def summarize(state: TeamState) -> dict:
+def summarize(state: TeamState) -> dict[str, Any]:
     return {"notes": state["notes"] + " -> summarized"}
 
 
-rb = StateGraph(TeamState)
+rb = StateGraph(TeamState)  # ty: ignore[invalid-argument-type]
 rb.add_node("search", search)
 rb.add_node("summarize", summarize)
 rb.add_edge(START, "search")
@@ -53,7 +52,7 @@ rb.add_edge("summarize", END)
 researcher = rb.compile()  # <- a compiled graph...
 
 
-def writer(state: TeamState) -> dict:
+def writer(state: TeamState) -> dict[str, Any]:
     return {"draft": f"Article based on: {state['notes']}", "steps": state["steps"] + ["writer"]}
 
 
@@ -61,13 +60,13 @@ def writer(state: TeamState) -> dict:
 def supervisor(state: TeamState) -> Command[Literal["researcher", "writer", "__end__"]]:
     # Decide who goes next based on what's missing. (An LLM would do this in real life.)
     if not state.get("notes"):
-        return Command(goto="researcher", update={"steps": state["steps"] + ["supervisor->researcher"]})
+        return Command(goto="researcher", update={"steps": state["steps"] + ["supervisor->researcher"]})  # ty: ignore[invalid-explicit-return]
     if not state.get("draft"):
-        return Command(goto="writer", update={"steps": state["steps"] + ["supervisor->writer"]})
-    return Command(goto=END, update={"steps": state["steps"] + ["supervisor->done"]})
+        return Command(goto="writer", update={"steps": state["steps"] + ["supervisor->writer"]})  # ty: ignore[invalid-explicit-return]
+    return Command(goto=END, update={"steps": state["steps"] + ["supervisor->done"]})  # ty: ignore[invalid-explicit-return]
 
 
-b = StateGraph(TeamState)
+b = StateGraph(TeamState)  # ty: ignore[invalid-argument-type]
 b.add_node("supervisor", supervisor)
 b.add_node("researcher", researcher)  # <- ...used directly as a node
 b.add_node("writer", writer)
@@ -88,7 +87,7 @@ if __name__ == "__main__":
         subgraphs=True,
         version="v2",
     ):
-        print(" ns=", chunk["ns"], "->", list(chunk["data"].keys()))
+        print(" ns=", chunk["ns"], "->", list(chunk["data"].keys()))  # ty: ignore[missing-union-attribute]
 
 # TRADE-OFFS TO BE ABLE TO DISCUSS
 #  - More agents != better. Each hop costs latency + tokens + failure surface. Start with ONE agent

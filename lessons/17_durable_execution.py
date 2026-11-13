@@ -32,13 +32,13 @@ import operator
 import sqlite3
 import tempfile
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
-from typing_extensions import TypedDict
-
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy
+from typing_extensions import TypedDict
 
 RUNS: dict[str, int] = {}
 FAIL = {"flaky_enrich": True}
@@ -55,24 +55,24 @@ def _tick(name: str) -> None:
     RUNS[name] = RUNS.get(name, 0) + 1
 
 
-def validate(state: OrderState) -> dict:
+def validate(state: OrderState) -> dict[str, Any]:
     _tick("validate")
     return {"log": ["validated"]}
 
 
-def enrich_tax(state: OrderState) -> dict:
+def enrich_tax(state: OrderState) -> dict[str, Any]:
     _tick("enrich_tax")
     return {"log": ["tax"]}
 
 
-def flaky_enrich(state: OrderState) -> dict:
+def flaky_enrich(state: OrderState) -> dict[str, Any]:
     _tick("flaky_enrich")
     if FAIL["flaky_enrich"]:
         raise RuntimeError("enrichment service down")
     return {"log": ["enriched"]}
 
 
-def charge(state: OrderState) -> dict:
+def charge(state: OrderState) -> dict[str, Any]:
     """IDEMPOTENT side effect: the provider dedupes on the key, so a redo is harmless."""
     _tick("charge")
     key = f"order-{state['order_id']}"
@@ -82,7 +82,7 @@ def charge(state: OrderState) -> dict:
 
 def build(path: Path):
     """Each call builds a NEW graph + NEW connection = what a restarted process would do."""
-    b = StateGraph(OrderState)
+    b = StateGraph(OrderState)  # ty: ignore[invalid-argument-type]
     for name, fn in [
         ("validate", validate),
         ("enrich_tax", enrich_tax),
@@ -100,8 +100,8 @@ def build(path: Path):
     return b.compile(checkpointer=SqliteSaver(conn))
 
 
-def crash_and_resume(db: Path) -> dict:
-    cfg = {"configurable": {"thread_id": "order-42"}}
+def crash_and_resume(db: Path) -> dict[str, Any]:
+    cfg: RunnableConfig = {"configurable": {"thread_id": "order-42"}}
     first = {"order_id": "42", "amount": 99.0, "log": []}
     try:
         build(db).invoke(first, cfg, durability="sync")
@@ -118,7 +118,7 @@ def crash_and_resume(db: Path) -> dict:
 ATTEMPTS = {"n": 0}
 
 
-def sometimes_fails(state: OrderState) -> dict:
+def sometimes_fails(state: OrderState) -> dict[str, Any]:
     ATTEMPTS["n"] += 1
     if ATTEMPTS["n"] < 3:
         raise ConnectionError("blip")
@@ -126,7 +126,7 @@ def sometimes_fails(state: OrderState) -> dict:
 
 
 def retry_graph():
-    b = StateGraph(OrderState)
+    b = StateGraph(OrderState)  # ty: ignore[invalid-argument-type]
     b.add_node(
         "call",
         sometimes_fails,
@@ -153,7 +153,7 @@ if __name__ == "__main__":
     print("      flaky_enrich ran twice (crash + success).")
 
     print("\n2) idempotency: replaying `charge` must not double charge")
-    cfg = {"configurable": {"thread_id": "order-42"}}
+    cfg: RunnableConfig = {"configurable": {"thread_id": "order-42"}}
     g = build(db)
     # rewind to just before `charge` and re-execute it (what a redo after a mid-node crash is)
     before_charge = next(s for s in g.get_state_history(cfg) if s.next == ("charge",))

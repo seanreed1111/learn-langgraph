@@ -14,29 +14,30 @@ Runs offline with a scripted model. Set an API key in .env to use a real LLM
 
 Run:  python capstone/support_agent.py
 """
-
 import sys
 from pathlib import Path
+from typing import Any
+
+from langchain_core.runnables import RunnableConfig
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lessons"))
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage  # noqa: E402
-from langchain_core.tools import tool  # noqa: E402
-
-from common import get_model, tool_call_msg  # noqa: E402
-from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
-from langgraph.graph import END, START, MessagesState, StateGraph  # noqa: E402
-from langgraph.types import Command, RetryPolicy, interrupt  # noqa: E402
+from common import get_model, tool_call_msg
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.tools import tool
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.types import Command, RetryPolicy, interrupt
 
 ORDERS = {"123": {"item": "Headphones", "total": 79.0, "status": "delivered"}}
-REFUNDS: list[dict] = []  # pretend database
+REFUNDS: list[dict[str, Any]] = []  # pretend database
 
 
 @tool
 def lookup_order(order_id: str) -> str:
     """Look up an order by id and return its details."""
     order = ORDERS.get(order_id)
-    return str(order) if order else f"No order {order_id}"
+    return str(order) if order is not None else f"No order {order_id}"
 
 
 @tool
@@ -57,38 +58,38 @@ SYSTEM = SystemMessage(
 def build_agent(model=None, checkpointer=None):
     model = (model or get_model()).bind_tools(TOOLS)
 
-    def llm(state: MessagesState) -> dict:
+    def llm(state: MessagesState) -> dict[str, Any]:
         return {"messages": [model.invoke([SYSTEM, *state["messages"]])]}
 
     def route_after_llm(state: MessagesState) -> str:
-        calls = state["messages"][-1].tool_calls
+        calls = state["messages"][-1].tool_calls  # ty: ignore[missing-union-attribute]
         if not calls:
             return END
         return "approval" if any(c["name"] in SENSITIVE for c in calls) else "tools"
 
-    def approval(state: MessagesState) -> Command:
+    def approval(state: MessagesState) -> Command[str]:
         # Only the interrupt happens here - no side effects before it (node re-runs on resume).
-        calls = [c for c in state["messages"][-1].tool_calls if c["name"] in SENSITIVE]
+        calls = [c for c in state["messages"][-1].tool_calls if c["name"] in SENSITIVE]  # ty: ignore[missing-union-attribute]
         decision = interrupt({"type": "approve_tool_calls", "calls": calls})
         if decision == "approve":
-            return Command(goto="tools")
+            return Command(goto="tools")  # ty: ignore[invalid-explicit-return]
         rejected = [
             ToolMessage("Rejected by human reviewer. Do not retry.", tool_call_id=c["id"])
-            for c in state["messages"][-1].tool_calls
+            for c in state["messages"][-1].tool_calls  # ty: ignore[missing-union-attribute]
         ]
-        return Command(goto="llm", update={"messages": rejected})
+        return Command(goto="llm", update={"messages": rejected})  # ty: ignore[invalid-explicit-return]
 
-    def run_tools(state: MessagesState) -> dict:
+    def run_tools(state: MessagesState) -> dict[str, Any]:
         out = []
-        for c in state["messages"][-1].tool_calls:
+        for c in state["messages"][-1].tool_calls:  # ty: ignore[missing-union-attribute]
             try:
                 result = TOOLS_BY_NAME[c["name"]].invoke(c["args"])
-            except Exception as exc:  # noqa: BLE001 - report to the model, don't crash
+            except Exception as exc:
                 result = f"ERROR: {exc}"
             out.append(ToolMessage(str(result), tool_call_id=c["id"]))
         return {"messages": out}
 
-    b = StateGraph(MessagesState)
+    b = StateGraph(MessagesState)  # ty: ignore[invalid-argument-type]
     b.add_node("llm", llm, retry_policy=RetryPolicy(max_attempts=3))
     b.add_node("approval", approval)
     b.add_node("tools", run_tools)
@@ -110,7 +111,7 @@ def scripted_model(refund_amount: float = 79.0):
 
 if __name__ == "__main__":
     agent = build_agent(scripted_model())
-    cfg = {"configurable": {"thread_id": "ticket-001"}, "recursion_limit": 15}
+    cfg: RunnableConfig = {"configurable": {"thread_id": "ticket-001"}, "recursion_limit": 15}
 
     print(">> User: I want a refund for order 123")
     for chunk in agent.stream(

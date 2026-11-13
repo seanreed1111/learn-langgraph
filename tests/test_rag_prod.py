@@ -6,12 +6,12 @@ The testing pyramid for agents:
   3. evals on a labelled dataset                     - quality regression gate
   4. API contract (auth, isolation)                  - HTTP layer
 """
-
 import os
 import shutil
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import override
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -23,9 +23,9 @@ for _k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY"):
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from langchain_core.documents import Document  # noqa: E402
+from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
 from offline_llm import HashingEmbeddings, OfflineChatModel  # noqa: E402
 
-from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
 from rag_prod.api import create_app  # noqa: E402
 from rag_prod.app import USERS, build_app  # noqa: E402
 from rag_prod.config import Settings  # noqa: E402
@@ -106,7 +106,7 @@ class StubRetriever:
 
 
 def make_graph(settings, model=None, retriever=None):
-    return build_graph(settings, model or OfflineChatModel(), retriever or StubRetriever(), InMemorySaver())
+    return build_graph(settings, model or OfflineChatModel(), retriever or StubRetriever(), InMemorySaver())  # ty: ignore[invalid-argument-type]
 
 
 def test_rewrite_loop_recovers(settings):
@@ -118,6 +118,7 @@ def test_rewrite_loop_recovers(settings):
 
 def test_rewrite_budget_is_enforced(settings):
     class Never(StubRetriever):
+        @override
         def search(self, query, allowed):
             self.queries.append(query)
             return [Document(id="x", page_content="nothing relevant at all here", metadata={"source": "a.md", "title": "A", "access": "public"})]
@@ -130,6 +131,7 @@ def test_rewrite_budget_is_enforced(settings):
 
 def test_ungrounded_answers_are_not_returned(settings):
     class Ungrounded(OfflineChatModel):
+        @override
         def with_structured_output(self, schema, **kw):
             if schema is Groundedness:
                 return type("S", (), {"invoke": lambda s, m, *a, **k: Groundedness(grounded=False, reason="made up")})()
@@ -143,6 +145,7 @@ def test_ungrounded_answers_are_not_returned(settings):
 
 def test_hallucinated_citation_numbers_are_dropped(settings):
     class BadCites(OfflineChatModel):
+        @override
         def with_structured_output(self, schema, **kw):
             real = super().with_structured_output(schema)
             if schema.__name__ == "CitedAnswer":
@@ -156,9 +159,11 @@ def test_hallucinated_citation_numbers_are_dropped(settings):
 @pytest.mark.parametrize("text,fragment", [("   ", "enter a question"), ("x" * 5000, "too long")])
 def test_guard_rejects_bad_input_without_calling_the_model(settings, text, fragment):
     class Boom(OfflineChatModel):
+        @override
         def invoke(self, *a, **k):
             raise AssertionError("model must not be called")
 
+        @override
         def with_structured_output(self, schema, **k):
             raise_ = lambda *a, **kw: (_ for _ in ()).throw(AssertionError("model must not be called"))  # noqa: E731
             return type("S", (), {"invoke": raise_, "batch": raise_})()

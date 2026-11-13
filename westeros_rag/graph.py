@@ -29,17 +29,15 @@ Compared with lesson 14 this adds: a query PLAN (themes, jurisdiction, multi-par
 retrieval with deep-link citations, an injection guard, passage sanitizing, and an output leak check.
 """
 
-from dataclasses import dataclass
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Any, Literal
 
 from langchain_core.messages import AIMessage, AnyMessage
-from pydantic import BaseModel, Field
-from typing_extensions import TypedDict
-
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.runtime import Runtime
 from langgraph.types import Command, RetryPolicy
+from pydantic import BaseModel, Field
+from typing_extensions import TypedDict
 
 from rag_prod.observability import timed
 from westeros_rag.config import REGIONS, THEMES, LawContext, WSettings
@@ -53,13 +51,13 @@ DISCLAIMER = "Fictional legal system (Westeros). Not real legal advice."
 class LawState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], add_messages]
     question: str
-    plan: dict
+    plan: dict[str, Any]
     queries: list[str]
-    passages: list[dict]
+    passages: list[dict[str, Any]]
     rewrites: int
     generations: int
     answer: str
-    citations: list[dict]
+    citations: list[dict[str, Any]]
     grounded: bool
     status: str  # answered | abstained | rejected | chitchat | off_topic
     trace: list[str]
@@ -73,12 +71,12 @@ class LawInput(TypedDict):
 
 class LawOutput(TypedDict, total=False):
     answer: str
-    citations: list[dict]
+    citations: list[dict[str, Any]]
     status: str
     rewrites: int
     trace: list[str]
     flags: list[str]
-    passages: list[dict]
+    passages: list[dict[str, Any]]
     disclaimer: str
 
 
@@ -87,7 +85,7 @@ class QueryPlan(BaseModel):
 
     route: Literal["law", "chitchat", "off_topic"] = Field(description="'law' = about the laws of Westeros; 'chitchat' = greeting/thanks; 'off_topic' = anything else")
     themes: list[str] = Field(description=f"Up to 3 themes from {THEMES} that the question is about")
-    jurisdiction: Optional[str] = Field(default=None, description=f"A region from {REGIONS} ONLY if the user names one, else null")
+    jurisdiction: str | None = Field(default=None, description=f"A region from {REGIONS} ONLY if the user names one, else null")
     sub_questions: list[str] = Field(description="The question split into independent searchable parts (usually just one)")
 
 
@@ -155,7 +153,7 @@ def _text(m: AnyMessage) -> str:
     return m.content if isinstance(m.content, str) else str(m.content)
 
 
-def _context(passages: list[dict]) -> str:
+def _context(passages: list[dict[str, Any]]) -> str:
     return "\n\n".join(f"[{i}] {p['heading_path']} (kind={p['kind']})\n{p['text']}" for i, p in enumerate(passages, 1))
 
 
@@ -176,15 +174,15 @@ def build_graph(settings: WSettings, model, retriever: HierarchicalRetriever, le
                  "status": "", "trace": ["guard_input"], "flags": [], "queries": []}  # reset per-turn fields (lesson 14!)
         verdict = check_input(text, settings.max_question_chars)
         if not verdict.ok:
-            return Command(update={**fresh, "answer": verdict.message, "flags": [f"input:{verdict.category}"]}, goto="reject")
-        return Command(update={**fresh, "question": text}, goto="condense")
+            return Command(update={**fresh, "answer": verdict.message, "flags": [f"input:{verdict.category}"]}, goto="reject")  # ty: ignore[invalid-explicit-return]
+        return Command(update={**fresh, "question": text}, goto="condense")  # ty: ignore[invalid-explicit-return]
 
     @timed("reject")
-    def reject(state: LawState) -> dict:
+    def reject(state: LawState) -> dict[str, Any]:
         return {"status": "rejected", "disclaimer": DISCLAIMER, "trace": tr(state, "reject"), "messages": [AIMessage(state["answer"])]}
 
     @timed("condense")
-    def condense(state: LawState) -> dict:
+    def condense(state: LawState) -> dict[str, Any]:
         history, question = state["messages"][:-1][-6:], state["question"]
         if history:
             hist = "\n".join(f"{m.type}: {_text(m)[:300]}" for m in history)
@@ -202,20 +200,20 @@ def build_graph(settings: WSettings, model, retriever: HierarchicalRetriever, le
             "sub_questions": [q for q in raw.sub_questions if q.strip()][:3] or [state["question"]],
         }
         goto = {"law": "retrieve", "chitchat": "chitchat", "off_topic": "off_topic"}[plan["route"]]
-        return Command(update={"plan": plan, "queries": plan["sub_questions"], "trace": tr(state, f"analyze({plan['route']})")}, goto=goto)
+        return Command(update={"plan": plan, "queries": plan["sub_questions"], "trace": tr(state, f"analyze({plan['route']})")}, goto=goto)  # ty: ignore[invalid-explicit-return]
 
     @timed("chitchat")
-    def chitchat(state: LawState) -> dict:
+    def chitchat(state: LawState) -> dict[str, Any]:
         reply = _text(model.invoke(state["messages"]))
         return {"answer": reply, "status": "chitchat", "disclaimer": DISCLAIMER, "trace": tr(state, "chitchat"), "messages": [AIMessage(reply)]}
 
     @timed("off_topic")
-    def off_topic(state: LawState) -> dict:
+    def off_topic(state: LawState) -> dict[str, Any]:
         return {"answer": OFF_TOPIC_TEXT, "status": "off_topic", "disclaimer": DISCLAIMER, "trace": tr(state, "off_topic"),
                 "messages": [AIMessage(OFF_TOPIC_TEXT)]}
 
     @timed("retrieve")
-    def retrieve(state: LawState, runtime: Runtime[LawContext]) -> dict:
+    def retrieve(state: LawState, runtime: Runtime[LawContext]) -> dict[str, Any]:
         plan, merged = state["plan"], {}
         for q in state["queries"]:  # one hierarchical search PER sub-question, then merge (multi-topic questions)
             for p in retriever.search(q, runtime.context.access_levels, plan["jurisdiction"], plan["themes"]):
@@ -235,13 +233,13 @@ def build_graph(settings: WSettings, model, retriever: HierarchicalRetriever, le
         return {"passages": passages, "flags": flags, "trace": tr(state, f"retrieve({n_primary}+{len(passages) - n_primary}linked)")}
 
     @timed("grade_documents")
-    def grade_documents(state: LawState) -> dict:
+    def grade_documents(state: LawState) -> dict[str, Any]:
         passages = state["passages"]
         # Grade each passage against the SUB-QUESTION that retrieved it. Grading a poaching passage against
         # "what is the penalty for poaching, and who can grant a pardon?" wrongly rejects it for not mentioning pardons.
         prompts = [[{"role": "user", "content": GRADE_PROMPT.format(question=p.get("query") or state["question"], context=f"{p['heading_path']}\n{p['text'][:2500]}")}] for p in passages]
         grades = grade_llm.batch(prompts, config={"max_concurrency": 4}) if prompts else []
-        keep = [p for p, g in zip(passages, grades) if g.binary_score == "yes"]
+        keep = [p for p, g in zip(passages, grades, strict=True) if g.binary_score == "yes"]
         return {"passages": keep, "trace": tr(state, f"grade({len(keep)}/{len(passages)})")}
 
     def after_grade(state: LawState) -> Literal["generate", "rewrite_query", "abstain"]:
@@ -250,14 +248,14 @@ def build_graph(settings: WSettings, model, retriever: HierarchicalRetriever, le
         return "rewrite_query" if state["rewrites"] < settings.max_rewrites else "abstain"
 
     @timed("rewrite_query")
-    def rewrite_query(state: LawState) -> dict:
+    def rewrite_query(state: LawState) -> dict[str, Any]:
         new_q = _text(model.invoke([{"role": "user", "content": REWRITE_PROMPT.format(question=state["question"], query=" ".join(state["queries"]))}])).strip()
         return {"queries": [new_q or state["question"]], "rewrites": state["rewrites"] + 1, "trace": tr(state, "rewrite_query")}
 
     @timed("generate")
-    def generate(state: LawState) -> dict:
+    def generate(state: LawState) -> dict[str, Any]:
         passages = state["passages"]
-        feedback = "" if state.get("grounded", True) or not state.get("answer") else "\nYour previous answer had unsupported claims. State only what the passages say."
+        feedback = "" if state.get("grounded", True) or not bool(state.get("answer")) else "\nYour previous answer had unsupported claims. State only what the passages say."
         result = answer_llm.invoke([{"role": "user", "content": GENERATE_PROMPT.format(
             question=state["question"], context=_context(passages), feedback=feedback)}])
         valid = sorted({n for n in result.citations if 1 <= n <= len(passages)})  # drop invented passage numbers
@@ -272,7 +270,7 @@ def build_graph(settings: WSettings, model, retriever: HierarchicalRetriever, le
         return "verify" if state["citations"] else "abstain"
 
     @timed("verify")
-    def verify(state: LawState) -> dict:
+    def verify(state: LawState) -> dict[str, Any]:
         cited = [state["passages"][c["n"] - 1] for c in state["citations"]]
         verdict = verify_llm.invoke([{"role": "user", "content": VERIFY_PROMPT.format(
             question=state["question"], answer=state["answer"], context=_context(cited))}])
@@ -287,19 +285,19 @@ def build_graph(settings: WSettings, model, retriever: HierarchicalRetriever, le
     def output_guard(state: LawState, runtime: Runtime[LawContext]) -> Command[Literal["finalize", "abstain"]]:
         leaks = leak_detector.leaks(state["answer"], runtime.context.access_levels)
         if leaks:
-            return Command(update={"flags": [*state.get("flags", []), "leak_blocked"], "trace": tr(state, "output_guard(LEAK)")}, goto="abstain")
-        return Command(update={"trace": tr(state, "output_guard(ok)")}, goto="finalize")
+            return Command(update={"flags": [*state.get("flags", []), "leak_blocked"], "trace": tr(state, "output_guard(LEAK)")}, goto="abstain")  # ty: ignore[invalid-explicit-return]
+        return Command(update={"trace": tr(state, "output_guard(ok)")}, goto="finalize")  # ty: ignore[invalid-explicit-return]
 
     @timed("finalize")
-    def finalize(state: LawState) -> dict:
+    def finalize(state: LawState) -> dict[str, Any]:
         return {"status": "answered", "disclaimer": DISCLAIMER, "trace": tr(state, "finalize"), "messages": [AIMessage(state["answer"])]}
 
     @timed("abstain")
-    def abstain(state: LawState) -> dict:
+    def abstain(state: LawState) -> dict[str, Any]:
         return {"answer": ABSTAIN_TEXT, "citations": [], "passages": [], "status": "abstained", "disclaimer": DISCLAIMER,
                 "trace": tr(state, "abstain"), "messages": [AIMessage(ABSTAIN_TEXT)]}
 
-    b = StateGraph(LawState, input_schema=LawInput, output_schema=LawOutput, context_schema=LawContext)
+    b = StateGraph(LawState, input_schema=LawInput, output_schema=LawOutput, context_schema=LawContext)  # ty: ignore[invalid-argument-type]
     b.add_node("guard_input", guard_input, destinations=("condense", "reject"))
     b.add_node("reject", reject)
     b.add_node("condense", condense, retry_policy=RETRY)

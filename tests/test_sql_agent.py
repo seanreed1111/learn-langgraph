@@ -1,8 +1,9 @@
 """Lesson 20 tests: guard, DB-level read-only, approval flow, repair loop, eval gate."""
-
 import sqlite3
 import sys
 from pathlib import Path
+
+from langchain_core.runnables import RunnableConfig
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -23,7 +24,7 @@ def path(tmp_path):
     return db.create_demo_db(tmp_path / "t.sqlite")
 
 
-def cfg(t: str) -> dict:
+def cfg(t: str) -> RunnableConfig:
     return {"configurable": {"thread_id": t}}
 
 

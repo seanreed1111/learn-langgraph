@@ -1,0 +1,21 @@
+# Never bake secrets, local envs, or caches into the image.
+.env
+.env.*
+!.env.example
+.venv/
+.git/
+.github/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+__pycache__/
+*.pyc
+*.sqlite
+.rag_index/
+.westeros_index/
+.sql_demo.sqlite
+tests/
+docs/
+*.md
+!data/**/*.md

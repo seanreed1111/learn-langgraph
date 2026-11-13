@@ -17,14 +17,13 @@ Run:  python lessons/09_streaming.py
 """
 
 import asyncio
-
-from langchain_core.messages import AIMessage, HumanMessage
-from typing_extensions import TypedDict
-
-from langgraph.config import get_stream_writer
-from langgraph.graph import END, START, MessagesState, StateGraph
+from typing import Any
 
 from common import banner, get_model
+from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.config import get_stream_writer
+from langgraph.graph import END, START, MessagesState, StateGraph
+from typing_extensions import TypedDict
 
 
 # ------------------------------------------------ non-LLM graph: values/updates/custom
@@ -33,18 +32,18 @@ class State(TypedDict):
     joke: str
 
 
-def generate(state: State) -> dict:
+def generate(state: State) -> dict[str, Any]:
     writer = get_stream_writer()  # emit custom events from inside any node or tool
     writer({"status": "thinking of a joke..."})
     writer({"status": "polishing..."})
     return {"joke": f"Why did the {state['topic']} cross the road?"}
 
 
-def shout(state: State) -> dict:
+def shout(state: State) -> dict[str, Any]:
     return {"joke": state["joke"].upper()}
 
 
-b = StateGraph(State)
+b = StateGraph(State)  # ty: ignore[invalid-argument-type]
 b.add_node("generate", generate)
 b.add_node("shout", shout)
 b.add_edge(START, "generate")
@@ -56,11 +55,11 @@ graph = b.compile()
 model = get_model([AIMessage(content="LangGraph lets you build reliable agents as graphs.")])
 
 
-def chat(state: MessagesState) -> dict:
+def chat(state: MessagesState) -> dict[str, Any]:
     return {"messages": [model.invoke(state["messages"])]}
 
 
-c = StateGraph(MessagesState)
+c = StateGraph(MessagesState)  # ty: ignore[invalid-argument-type]
 c.add_node("chat", chat)
 c.add_edge(START, "chat")
 c.add_edge("chat", END)

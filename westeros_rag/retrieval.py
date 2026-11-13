@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import asdict, dataclass
+from typing import Any
 
 from langchain_core.documents import Document
 
@@ -38,18 +39,18 @@ class Passage:
     via: str | None = None  # for linked passages: the unit whose link led here
     themes: tuple[str, ...] = ()
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["themes"] = list(self.themes)
         return d
 
 
 class HierarchicalRetriever:
-    def __init__(self, corpus: Corpus, index: VectorIndex, enrich: dict[str, dict], settings: WSettings) -> None:
+    def __init__(self, corpus: Corpus, index: VectorIndex, enrich: dict[str, dict[str, Any]], settings: WSettings) -> None:
         self.corpus, self.index, self.enrich, self.s = corpus, index, enrich, settings
 
     # ------------------------------------------------------------------ helpers
-    def _permitted(self, meta: dict, allowed: set[str], jurisdiction: str | None) -> bool:
+    def _permitted(self, meta: dict[str, Any], allowed: set[str], jurisdiction: str | None) -> bool:
         return meta["access"] in allowed and (jurisdiction is None or meta["jurisdiction"] in ("all", jurisdiction))
 
     def _ranked(self, query: str, kind: str, k: int, allowed: set[str], jurisdiction: str | None):
@@ -84,7 +85,7 @@ class HierarchicalRetriever:
             rankings.append([doc.metadata["unit_id"] for doc, _ in ranked_summaries])
 
         unit_score: dict[str, float] = defaultdict(float)
-        for weight, ranking in zip([1.0, s.summary_weight], rankings):  # summaries are a COARSER signal: weight < 1
+        for weight, ranking in zip([1.0, s.summary_weight], rankings, strict=False):  # summaries are a COARSER signal: weight < 1
             for rank, u in enumerate(ranking, start=1):
                 unit_score[u] += weight / (60 + rank)
         if s.use_themes and themes:  # SOFT boost only: a wrong LLM-chosen tag must never hide the right answer
@@ -111,7 +112,7 @@ class HierarchicalRetriever:
         visited-set (cycles), access + jurisdiction checks (no leaking through links), relevance-ranked, capped."""
         q = set(tokenize(query))
         visited = {p.unit_id for p in primaries}
-        frontier, out = list(primaries), []
+        frontier, out = list(primaries), list[Passage]()
         for _ in range(self.s.link_depth):
             cands = []
             for src in frontier:
@@ -138,7 +139,7 @@ class HierarchicalRetriever:
         return out
 
     def _within_budget(self, passages: list[Passage]) -> list[Passage]:
-        budget, kept = self.s.context_budget_chars, []
+        budget, kept = self.s.context_budget_chars, list[Passage]()
         for p in passages:
             if budget <= 0:
                 break

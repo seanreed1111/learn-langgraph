@@ -19,6 +19,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, override
 
 from langchain_core.documents import Document
 from langchain_core.vectorstores import InMemoryVectorStore
@@ -89,6 +90,7 @@ class SyncStats:
     unchanged_docs: list[str] = field(default_factory=list)
     chunks: int = 0
 
+    @override
     def __str__(self) -> str:
         return (f"added={len(self.added_docs)} updated={len(self.updated_docs)} "
                 f"removed={len(self.removed_docs)} unchanged={len(self.unchanged_docs)} chunks={self.chunks}")
@@ -99,7 +101,7 @@ class Index:
         self.settings = settings
         self.embeddings = embeddings
         self.fingerprint = embedding_fingerprint
-        self.manifest: dict = {"embedding": embedding_fingerprint, "docs": {}}
+        self.manifest: dict[str, Any] = {"embedding": embedding_fingerprint, "docs": {}}
         self.store = InMemoryVectorStore(embeddings)
         self._load()
 
@@ -146,7 +148,7 @@ class Index:
             else:
                 stats.added_docs.append(source)
             chunks = chunk_document(doc, self.settings)
-            self.store.add_documents(chunks, ids=[c.id for c in chunks])
+            self.store.add_documents(chunks, ids=[str(c.id) for c in chunks])
             known[source] = {"hash": doc.metadata["doc_hash"], "ids": [c.id for c in chunks]}
 
         stats.chunks = sum(len(e["ids"]) for e in known.values())

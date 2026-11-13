@@ -6,10 +6,11 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, replace
+from typing import Any
 
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph.state import CompiledStateGraph
 
 from rag_prod.llm import get_embeddings
 from westeros_rag.config import ROLES, LawContext, WSettings
@@ -27,12 +28,14 @@ class CorpusError(RuntimeError):
 
 
 def make_model():
-    from common import DEFAULT_MODEL, have_real_llm  # lessons/common.py (path set by rag_prod.llm)
+    from common import (  # lessons/common.py (path set by rag_prod.llm)
+        have_real_llm,
+        make_real_chat_model,
+        model_name,
+    )
 
     if have_real_llm():
-        from langchain.chat_models import init_chat_model
-
-        return init_chat_model(os.getenv("LG_MODEL", DEFAULT_MODEL), temperature=0, timeout=30, max_retries=2), os.getenv("LG_MODEL", DEFAULT_MODEL)
+        return make_real_chat_model(timeout=30, max_retries=2), model_name()
     return OfflineLawModel(), "offline"
 
 
@@ -40,15 +43,15 @@ def make_model():
 class Pipeline:
     settings: WSettings
     corpus: Corpus
-    enrich: dict
+    enrich: dict[str, Any]
     index: VectorIndex
     retriever: HierarchicalRetriever
-    graph: object
+    graph: CompiledStateGraph[Any, Any, Any, Any]
     stats: SyncStats
     issues: list[Issue]
     llm_calls: int
 
-    def ask(self, question: str, role: str = "commoner", thread_id: str = "default") -> dict:
+    def ask(self, question: str, role: str = "commoner", thread_id: str = "default") -> dict[str, Any]:
         ctx: LawContext = ROLES[role]
         return self.graph.invoke({"messages": [{"role": "user", "content": question}]},
                                  {"configurable": {"thread_id": f"{ctx.user_id}:{thread_id}"}}, context=ctx)
