@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "learn-langgraph"
+version = "0.1.0"
+description = "LangGraph zero-to-hero lessons + a production-style agentic RAG service"
+requires-python = ">=3.12"
+dependencies = [
+  "langgraph>=1.2",
+  "langchain>=1.5",
+  "langchain-anthropic",
+  "langgraph-checkpoint-sqlite",
+  "langchain-text-splitters",
+  "numpy",
+  "python-dotenv",
+  "fastapi",
+  "uvicorn",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "httpx"]
+openai = ["langchain-openai"]          # real embeddings (Anthropic has no embeddings API)
+postgres = ["langgraph-checkpoint-postgres", "psycopg[binary,pool]"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["rag_prod", "westeros_rag", "sql_agent"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

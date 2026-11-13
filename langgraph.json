@@ -1,0 +1,9 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "rag": "./rag_prod/studio.py:graph",
+    "westeros": "./westeros_rag/studio.py:graph",
+    "sql": "./sql_agent/studio.py:graph"
+  },
+  "env": ".env"
+}

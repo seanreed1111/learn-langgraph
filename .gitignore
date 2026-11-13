@@ -1,0 +1,9 @@
+.venv/
+.env
+__pycache__/
+.pytest_cache/
+*.sqlite
+.rag_index/
+.westeros_index/
+*.egg-info/
+.sql_demo.sqlite
