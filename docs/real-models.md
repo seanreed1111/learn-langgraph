@@ -44,7 +44,8 @@ fingerprint and forces a rebuild, on purpose.
    it should not be, long outputs, provider timeouts and rate limits. `rag_prod` already sets a timeout and
    bounded retries; lesson 12 shows per-node `RetryPolicy`.
 6. **Tracing pays for itself.** Set `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` to see every prompt,
-   tool call and token count.
+   tool call and token count. Lessons 21-23 cover tracing, evaluation and the production loop, all runnable
+   offline.
 
 ## Proving the real path still works
 

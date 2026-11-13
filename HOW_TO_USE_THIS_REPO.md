@@ -27,11 +27,12 @@ full lesson plans (objectives, exercises, check-your-understanding questions); t
 | Study a production-style service | `rag_prod/` (lesson 14), `westeros_rag/` (lesson 15), `sql_agent/` (lesson 20) |
 | Build something end to end | `capstone/support_agent.py` |
 | Prepare for interviews | [`INTERVIEW.md`](INTERVIEW.md) |
+| Trace, evaluate and monitor an agent | lessons 21-23 (LangSmith track; offline, no account needed) |
 | Check what is left before shipping an agent | [`PRODUCTION_CHECKLIST.md`](PRODUCTION_CHECKLIST.md) |
 | Use a real model instead of the fakes | [`docs/real-models.md`](docs/real-models.md) |
 | Change the code or upgrade dependencies | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 
-Lessons 01-12 and 16-18 are single Python files: the explanation is in the docstring, the code runs, and
+Lessons 01-12, 16-18 and 21-23 are single Python files: the explanation is in the docstring, the code runs, and
 exercises sit at the bottom. Lessons 13-15, 19 and 20 are bigger: a narrative plus runnable code.
 
 ## Set up in five minutes
@@ -77,7 +78,7 @@ Prerequisites are cumulative, except Track D (lessons 16-19), which you can take
 | Goal | Path |
 |---|---|
 | **From scratch, three weeks** | Week 1: lessons 01-05 (do every exercise, re-type 05 from memory). Week 2: 06-10 with a real model for 05, 06 and 08. Week 3: 11-12, the capstone, then `INTERVIEW.md`. |
-| **Two more weeks to "advanced"** | Week 4: RAG, lessons 13-15 (run the evals, read an ablation table). Week 5: lessons 16-19, then 20. |
+| **Two more weeks to "advanced"** | Week 4: RAG, lessons 13-15 (run the evals, read an ablation table). Week 5: lessons 16-19, then 20, then the LangSmith track (21-23). |
 | **Interview in a week** | Lessons 05, 08, 07, 17, 18, 19, then `INTERVIEW.md` and its whiteboard drills. |
 | **I only need to ship an agent** | 05, 07, 08, 12, then the capstone and `PRODUCTION_CHECKLIST.md`. |
 | **I already know LangGraph** | Skim 17-19 for durable execution, the Pregel runtime and the gotchas, then read `rag_prod/` and `sql_agent/` as reference designs. |

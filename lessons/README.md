@@ -26,7 +26,10 @@ tests that prove it, so you can read the behavior as an assertion.
 | 18 Pregel runtime | `python lessons/18_pregel_runtime.py` | `test_lessons_16_18.py`, `test_smoke.py` |
 | 19 Gotchas | `python lessons/19_gotchas.py` | `test_gotchas.py`, `test_smoke.py` |
 | 20 SQL agent | `python -m sql_agent.cli "How many customers do we have?"` | `test_sql_agent.py`, `test_smoke.py` (CLI, eval gate) |
+| 21 LangSmith tracing | `python lessons/21_langsmith_tracing.py` | `test_langsmith_lessons.py`, `test_smoke.py` |
+| 22 LangSmith evaluation | `python lessons/22_langsmith_evaluation.py` | `test_langsmith_lessons.py`, `test_smoke.py` |
+| 23 LangSmith production loop | `python lessons/23_langsmith_production_loop.py` | `test_langsmith_lessons.py`, `test_smoke.py` |
 | ★ Capstone | `python capstone/support_agent.py` | `test_graphs.py::test_capstone_approval_gate`, `test_smoke.py` |
 
-`common.py` and `offline_llm.py` are shared helpers (scripted fake chat model, offline embeddings); the model
+`common.py`, `offline_llm.py`, `trace_tools.py` (fake LangSmith server, run recorder, mini experiment harness) and `demo_agent.py` (the deterministic agent for lessons 21-23) are shared helpers (scripted fake chat model, offline embeddings); the model
 id and provider selection live in `common.py` only.

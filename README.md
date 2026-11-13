@@ -1,6 +1,6 @@
 # LangGraph: Zero to Hero
 
-A hands-on, runnable path from "what's a graph?" to production-grade agents: 20 lessons, a capstone, three
+A hands-on, runnable path from "what's a graph?" to production-grade agents: 23 lessons, a capstone, three
 production-style apps (RAG, hierarchical RAG, SQL agent), an offline test suite with CI, and an interview guide.
 
 Everything runs **offline by default** (scripted fake LLMs and deterministic test doubles). Add an API key
@@ -41,6 +41,10 @@ tests on Python 3.12, 3.13 and 3.14; the project requires Python 3.12+. The defa
   - [Lesson 19: Gotchas and anti-patterns](#lesson-19-gotchas-and-anti-patterns)
 - [Track E: Tool-using agents against real systems (20)](#track-e-tool-using-agents-against-real-systems-20)
   - [Lesson 20: A safe SQL agent](#lesson-20-a-safe-sql-agent)
+- [Track F: LangSmith with LangGraph (21-23)](#track-f-langsmith-with-langgraph-21-23)
+  - [Lesson 21: LangSmith tracing for LangGraph](#lesson-21-langsmith-tracing-for-langgraph)
+  - [Lesson 22: Evaluating a LangGraph agent with LangSmith](#lesson-22-evaluating-a-langgraph-agent-with-langsmith)
+  - [Lesson 23: The LangSmith production loop](#lesson-23-the-langsmith-production-loop)
 - [Capstone: Support agent with approval gate](#capstone-support-agent-with-approval-gate)
 - [Study plans](#study-plans)
 - [Concepts in one page](#concepts-in-one-page)
@@ -115,6 +119,9 @@ use the project scripts instead: `hatch run test`, `hatch run check` (lint + typ
 | 18 | [Pregel runtime](#lesson-18-the-pregel-runtime) | Super-steps, channels, conflicts | "How does it really work?" |
 | 19 | [Gotchas](#lesson-19-gotchas-and-anti-patterns) | Silent failures and how to avoid them | Intermediate vs advanced |
 | 20 | [SQL agent](#lesson-20-a-safe-sql-agent) | Layered safety, approval, execution-accuracy evals | Tools against real systems |
+| 21 | [LangSmith tracing](#lesson-21-langsmith-tracing-for-langgraph) | Run trees, tags/metadata, `@traceable`, redaction | Observability |
+| 22 | [LangSmith evaluation](#lesson-22-evaluating-a-langgraph-agent-with-langsmith) | Datasets, evaluators, trajectory checks, CI gate | "How do you test agents?" |
+| 23 | [LangSmith production loop](#lesson-23-the-langsmith-production-loop) | Feedback, failures to datasets, cost per release | Operating agents |
 | ★ | [Capstone](#capstone-support-agent-with-approval-gate) | Everything together | Portfolio piece |
 
 ---
@@ -1249,6 +1256,195 @@ the database; running the preview without rolling back; running the write in the
 
 ---
 
+## Track F: LangSmith with LangGraph (21-23)
+
+LangSmith is LangChain's tracing, evaluation and monitoring platform. These three lessons cover how it works
+with LangGraph: seeing what a run did, measuring whether it was good, and closing the loop in production. All
+three run **offline**: a stand-in HTTP session sits behind the real `langsmith.Client`, so you read the exact
+payloads LangSmith would receive. Set `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` and the same code lands
+in the web UI. (The real upload paths could not be exercised without an account; the offline paths are tested.)
+
+### Lesson 21: LangSmith tracing for LangGraph
+
+**Proof:** [`lessons/21_langsmith_tracing.py`](lessons/21_langsmith_tracing.py) (helpers: `lessons/trace_tools.py`,
+`lessons/demo_agent.py`) · **Tests:** `tests/test_langsmith_lessons.py` · **Prerequisites:** lessons 05, 07, 08, 12.
+
+**Overview.** LangGraph is already instrumented: one environment variable turns every run into a trace, a tree of
+runs from graph to node to model or tool call. The craft is in what you add: names, tags and metadata you can
+filter on, `@traceable` for plain Python, a project per environment, redaction, sampling, and knowing that an
+interrupt and its resume are two separate traces.
+
+**Learning objectives.** By the end of this lesson you will be able to:
+1. **Describe** the run tree LangGraph produces (graph, node, LLM, tool) and read one.
+2. **Label** runs with `run_name`, `tags` and `metadata`, and **explain** which config keys are copied automatically (`thread_id`) and which are not.
+3. **Instrument** plain Python with `@traceable` so it nests under the calling node.
+4. **Protect** data with `hide_inputs`/`hide_outputs` and **control volume** with sampling.
+5. **Predict** how interrupt and resume appear (two traces, one thread) and **choose** a `run_id` up front.
+6. **Test** tracing behavior offline without a network.
+
+**Concepts covered:** traces and runs, projects, tags vs metadata, `@traceable`, `tracing_context`,
+client-side redaction, sampling, flushing in short-lived processes, `run_id`.
+
+**Lesson walkthrough.** Six sections: the shape of a trace; labels; the real client with `@traceable` and a
+project (the HTTP calls it makes are `POST /runs` at start and `PATCH /runs/{id}` at end); redaction; interrupt
+plus resume; a chosen run id. Observed on `langsmith 0.14.17`: a custom `configurable` key such as `tenant` was
+**not** copied into metadata, `thread_id` was; a sampling rate of `0.0` sent no runs at all.
+
+**Run it and what you should see.** `python lessons/21_langsmith_tracing.py` prints an indented run tree, the
+labels on the root run, the nested `handle_ticket > normalize_question + support-chat` tree, redacted inputs,
+two root traces with the same `thread_id`, and a chosen run id equal to the stored one.
+
+**Common mistakes.** Putting your own keys in `configurable` and expecting them in LangSmith (use `metadata`);
+losing traces in a serverless process that exits before the background upload (call `wait_for_all_tracers()` or
+set `LANGCHAIN_CALLBACKS_BACKGROUND=false`); tracing PII; mixing dev and prod in one project.
+
+**Exercises (from the file).**
+1. Move `user_id` into `configurable` only. Is it in the root's metadata? Fix it.
+2. Add metadata from inside a `@traceable` function with `get_current_run_tree()`. Where does it appear?
+3. Make `redact_inputs` mask only long digit runs and keep the rest readable.
+4. Set `tracing_sampling_rate=0.0`. How many runs arrive, and why is sampling bad for evals?
+5. Make the `tools` node raise. Which run carries the error, and does the root show it too?
+
+**Check your understanding.**
+1. [O1] Which runs sit between the root and an LLM call in a ReAct graph?
+2. [O2] You pass `configurable={"thread_id": "a", "tenant": "acme"}`. Which appears in metadata, and how do you get `tenant` there?
+3. [O3] What does `@traceable` do when tracing is off?
+4. [O4] Why is `hide_inputs` a client setting rather than something you do in each node?
+5. [O5] A user pauses at an approval and resumes an hour later. How many traces are there, and what ties them together?
+6. [O5] Why would you pass your own `run_id`?
+
+<details><summary>Answers</summary>
+
+1. The graph's node runs (for example `agent`), and the LLM call is a child of its node. Tool calls sit under the `tools` node.
+2. Only `thread_id` is copied. Put `tenant` in the config's `metadata`.
+3. It is a no-op: the function runs normally and records nothing.
+4. The client sees every run's inputs before upload, including LangChain's own runs you do not control, so one hook covers everything.
+5. Two root traces, one per invoke, sharing the same `thread_id` in metadata.
+6. You know the trace id before the run finishes, so you can return it to the client and attach feedback to exactly that trace later (lesson 23).
+</details>
+
+---
+
+### Lesson 22: Evaluating a LangGraph agent with LangSmith
+
+**Proof:** [`lessons/22_langsmith_evaluation.py`](lessons/22_langsmith_evaluation.py) · **Tests:**
+`tests/test_langsmith_lessons.py` · **Prerequisites:** lessons 05, 12, 21.
+
+**Overview.** Tracing tells you what happened; evaluation tells you whether it was good and whether your last
+change helped. A dataset of examples, a target function that runs your graph, evaluators that score outputs, and
+experiments you can compare. The target returns the tool trajectory, so trajectory checks are plain comparisons.
+
+**Learning objectives.** By the end of this lesson you will be able to:
+1. **Design** a small dataset with positive, negative and edge-case examples.
+2. **Write** a target and evaluators with the `(inputs, outputs, reference_outputs) -> {"key", "score"}` contract.
+3. **Distinguish** outcome, trajectory, quality (LLM-judge) and cost/latency evaluations, and pick the cheapest that works.
+4. **Build** a threshold gate that fails CI on regression.
+5. **Run** the same code through `langsmith.evaluate` against a named dataset.
+6. **Explain** why a single LLM-judge run must not gate CI.
+
+**Concepts covered:** datasets, targets, code vs LLM evaluators, trajectory evaluation, experiments,
+repetitions, regression gates, smoke vs full suites.
+
+**Lesson walkthrough.** A six-row dataset (including a no-tool greeting and an unknown order); a target;
+four evaluators (`answer_contains`, `exact_trajectory`, reference-free `no_redundant_calls`, and a quality judge
+that is a labelled heuristic offline and an LLM judge with a real key); a gate; a simulated regression; and
+`run_on_langsmith`. The offline harness `run_experiment` mirrors `evaluate`'s contract because the real
+`evaluate()` always uploads (observed: it tried to reach the API even with `upload_results=False`).
+
+**Run it and what you should see.** `python lessons/22_langsmith_evaluation.py`: all baseline means `1.0` and
+the gate passes; the simulated regression drops `answer_contains` and `exact_trajectory` to `0.167` and the gate
+fails, while the heuristic quality score still reads `1.0`.
+
+**Common mistakes.** Gating on one LLM-judge run; a dataset of only happy paths; freezing a bad production
+answer as the expected one; strict trajectory equality where order does not matter.
+
+**Exercises (from the file).**
+1. Add an example for an unknown order and decide who owns the expected behavior.
+2. Write a latency evaluator using a `RunRecorder`.
+3. Relax `exact_trajectory` to ignore order and extra read-only calls. What precision do you lose?
+4. With a real key, run the experiment three times and see which scores wobble.
+5. Split the dataset into a smoke set and a full set.
+
+**Check your understanding.**
+1. [O1] Why include a "Hi there" example that expects no tool call?
+2. [O2] How does `run_experiment` decide which arguments to pass an evaluator?
+3. [O3] Why return the tool names from the target instead of reading them from the trace?
+4. [O4] The regression run's quality score stayed `1.0`. What does that tell you about judges?
+5. [O5] What changes between the offline run and `run_on_langsmith`?
+6. [O6] How do you make an LLM-judge metric usable in a gate?
+
+<details><summary>Answers</summary>
+
+1. Negative examples catch an agent that over-calls tools; happy paths alone cannot.
+2. It inspects the evaluator's parameter names and passes only `inputs`, `outputs` and `reference_outputs` that it asks for.
+3. It is portable and simple: the evaluator compares plain data, and does not depend on how traces are handed to evaluators.
+4. A weak or generic judge can miss regressions that precise code checks catch, so keep both and test your judge.
+5. Only the transport and storage: the same target and evaluators, run by `langsmith.evaluate` against an uploaded dataset, with experiments stored for comparison.
+6. Repeat runs, gate on the mean with a margin or a trend, and keep deterministic checks as the hard gate.
+</details>
+
+---
+
+### Lesson 23: The LangSmith production loop
+
+**Proof:** [`lessons/23_langsmith_production_loop.py`](lessons/23_langsmith_production_loop.py) · **Tests:**
+`tests/test_langsmith_lessons.py` · **Prerequisites:** lessons 07, 08, 21, 22.
+
+**Overview.** Production is the loop that joins tracing and evaluation: ship, observe, collect failures, turn
+them into dataset rows, fix, and gate. The pieces are a `thread_id` in metadata, a known `run_id`, feedback
+attached to it, errors located on the node, bad turns converted to examples, and cost and latency per release.
+
+**Learning objectives.** By the end of this lesson you will be able to:
+1. **Group** traces by conversation using `thread_id`.
+2. **Return** a run id from your API and **attach** feedback to it (`create_feedback`, including `session_id`).
+3. **Locate** the failing node in a trace, knowing errors bubble up to parents.
+4. **Convert** badly rated turns into dataset examples without freezing the bad answer.
+5. **Report** tokens, latency and errors per release from traces.
+6. **Place** each step of the loop in LangSmith (dashboards, online evaluators, annotation queues, Studio).
+
+**Concepts covered:** thread grouping, feedback, error localization, production-to-dataset flow, release
+tagging, cost tracking, Studio and the UI features the loop uses.
+
+**Lesson walkthrough.** Serving turns with a chosen `run_id` and `release:` tag; grouping by thread; feedback
+payloads (recent `langsmith` warns when `session_id`, the project id, is missing); failures to examples;
+`innermost_failure` (observed failed runs: `support-chat`, `tools`, `lookup_order`, culprit `lookup_order`); and a
+release report with token totals.
+
+**Run it and what you should see.** `python lessons/23_langsmith_production_loop.py`: `{'cust-1': 2, 'cust-2': 1}`
+traces per thread, a feedback payload, one new example from the bad refund turn, culprit `lookup_order`, and a
+cost/latency summary.
+
+**Common mistakes.** Attaching feedback to the first trace of an interrupted thread instead of the last; copying
+the bad answer into the dataset as the reference; looking only at the root run's error; tracking cost only on the
+invoice.
+
+**Exercises (from the file).**
+1. Send a model-judge score as feedback under its own key.
+2. Write the human review step that fills in an example's expectation.
+3. Add a per-node latency table.
+4. Serve an interrupting turn and decide which trace gets the thumbs-up.
+5. Write an alert rule over two release reports.
+
+**Check your understanding.**
+1. [O1] Why does one conversation produce many traces?
+2. [O2] Why choose the `run_id` yourself?
+3. [O3] Three runs show errors. How do you find the culprit?
+4. [O4] Why leave `must_contain` empty when converting a bad turn?
+5. [O5] Where do token counts come from?
+6. [O6] Which loop steps need no code, only the LangSmith UI?
+
+<details><summary>Answers</summary>
+
+1. Each invoke is its own root run, including every resume after an interrupt; the thread id links them.
+2. So the client can hold the id before the run finishes and a thumbs button can attach feedback to exactly that trace.
+3. Take the failed run with no failed child; parents are marked failed because the error propagated through them.
+4. The observed answer is the one you do not want; a human must write the correct expectation.
+5. From `usage_metadata` on LLM runs, filled in by the provider (the offline model reports synthetic counts).
+6. Dashboards, filters, online evaluators, annotation queues, alerts and experiment comparison.
+</details>
+
+---
+
 ## Capstone: Support agent with approval gate
 
 **File:** [`capstone/support_agent.py`](capstone/support_agent.py) · **Run:** `python capstone/support_agent.py` ·
@@ -1317,7 +1513,7 @@ provider rejects the next request); no explicit recursion limit.
 
 **Two more weeks to reach "advanced"**
 - **Week 4, RAG:** lessons 13-15. Run the evals, read an ablation table, break the ACL test on purpose.
-- **Week 5, depth:** lessons 16-19, then 20. Do the lesson 19 exercises on your own graph; run
+- **Week 5, depth:** lessons 16-19, then 20 and the LangSmith track (21-23). Do the lesson 19 exercises on your own graph; run
   `pytest tests/test_gotchas.py` after every dependency upgrade.
 
 **Interview in a week:** 05, 08, 07, 17, 18, 19, then `INTERVIEW.md` and the whiteboard drills.
@@ -1336,7 +1532,7 @@ provider rejects the next request); no explicit recursion limit.
 ## Project layout
 
 ```
-lessons/        01-12, 16-18 scripts; 13 tutorial; 14, 15, 19, 20 narratives (.md); 19_gotchas.py; common.py, offline_llm.py
+lessons/        01-12, 16-18, 21-23 scripts; 13 tutorial; 14, 15, 19, 20 narratives (.md); 19_gotchas.py; common.py, offline_llm.py, trace_tools.py, demo_agent.py
 docs/           lessons/ (per-lesson plans by track), real-models.md
 capstone/       support_agent.py
 rag_prod/       lesson 14 service (ingest, retrieval, graph, api, evals)
@@ -1376,6 +1572,7 @@ python -m sql_agent.evals.run_evals        # lesson 20 gate
 | `tests/test_lessons_16_18.py` | lessons 16-18 |
 | `tests/test_sql_agent.py` | lesson 20 |
 | `tests/test_gotchas.py` | lesson 19 (pins library behavior) |
+| `tests/test_langsmith_lessons.py` | lessons 21-23 (traces, evals, production loop; offline) |
 | `tests/test_repo_integrity.py` | exact pins match the installed packages; README/doc links resolve |
 | `tests/test_live.py` | opt-in smoke tests against a real model |
 
@@ -1424,6 +1621,7 @@ control · guardrails and security (prompt injection, tool permissions, tenant i
 - Agentic RAG tutorial: <https://docs.langchain.com/oss/python/langgraph/agentic-rag.md>
 - SQL agent tutorial: <https://docs.langchain.com/oss/python/langgraph/sql-agent.md>
 - Deploy: <https://docs.langchain.com/oss/python/langgraph/deploy.md>
+- LangSmith: <https://docs.langchain.com/langsmith/home> and the tracing quickstart <https://docs.langchain.com/langsmith/observability-quickstart.md>
 - Full index: <https://langchain-ai.github.io/langgraph/llms.txt>
 
 > API note: LangGraph moves fast. If something errors after an upgrade, check the changelog first, then run

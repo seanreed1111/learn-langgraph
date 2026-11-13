@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 LESSON_FILES = sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "lessons").glob("[0-9][0-9]_*.py"))
 SCRIPTS = [*LESSON_FILES, "capstone/support_agent.py"]
 # Python code that must exist as lessons (guards against a lesson file being renamed or dropped).
-EXPECTED_LESSONS = {f"{n:02d}" for n in [*range(1, 14), 16, 17, 18, 19]}
+EXPECTED_LESSONS = {f"{n:02d}" for n in [*range(1, 14), 16, 17, 18, 19, 21, 22, 23]}
 
 
 def _run(args: list[str], timeout: int = 180) -> subprocess.CompletedProcess[str]:
