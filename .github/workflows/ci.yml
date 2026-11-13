@@ -1,15 +1,39 @@
 name: CI
 
-# Intentionally a no-op for now. The real checks (ruff, ty, pytest on Python 3.12/3.13/3.14) are
-# run locally with `hatch run check`. Restore them from git history (commit c9f759d) to re-enable CI.
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # manual only: run it from the Actions tab
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  noop:
+  test:
+    name: Python ${{ matrix.python }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13", "3.14"]
     steps:
-      - run: echo "CI is intentionally disabled."
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install (exact pins from pyproject.toml)
+        run: pip install -e ".[dev]"
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Type check (ty, every rule = error)
+        run: ty check
+      - name: Tests + coverage (offline: no network, no API keys)
+        run: pytest -q --cov --cov-report=term-missing
+        env:
+          ANTHROPIC_API_KEY: ""
+          OPENAI_API_KEY: ""
+          GOOGLE_API_KEY: ""

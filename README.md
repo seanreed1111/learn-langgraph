@@ -7,8 +7,8 @@ Everything runs **offline by default** (scripted fake LLMs and deterministic tes
 to `.env` and the same code uses a real model (see [Using a real model](docs/real-models.md)).
 
 Dependencies are **pinned to exact versions** in `pyproject.toml` (verified together on 2026-11-12:
-`langgraph 1.2.21`, `langchain 1.5.0`, `langchain-core 1.8.0`, `langchain-anthropic 1.7.10`). The GitHub CI workflow is
-currently a no-op (run `hatch run check` locally); the project requires Python 3.12+. The default model is
+`langgraph 1.2.21`, `langchain 1.5.0`, `langchain-core 1.8.0`, `langchain-anthropic 1.7.10`). The GitHub CI workflow runs
+the tests on Python 3.12, 3.13 and 3.14 on manual trigger only; the project requires Python 3.12+. The default model is
 `anthropic:claude-sonnet-5-5` (the newest Sonnet); change it with one environment variable.
 
 ## Table of contents
@@ -1540,7 +1540,7 @@ westeros_rag/   lesson 15 pipeline (parse, enrich, index, retrieval, guardrails,
 sql_agent/      lesson 20 agent (db, guard, graph, offline/llm writers, cli, evals)
 data/           blog/ (13), kb/ (14), westeros/ (15, linked documents)
 tests/          offline tests (+ opt-in live tests); conftest.py forces offline mode
-.github/        CI workflow (currently a no-op; full version in git history)
+.github/        CI (manual trigger): ruff, ty, pytest + coverage on Python 3.12 / 3.13 / 3.14
 langgraph.json  Studio / `langgraph dev` entries: rag, westeros, sql
 Dockerfile      serves rag_prod (cached dependency layer, non-root); docker-compose.yml runs it locally
 ```
