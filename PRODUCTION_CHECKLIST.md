@@ -1,6 +1,6 @@
 # Production checklist for an agentic RAG service
 
-Status key: [x] done in `rag_prod/`, [ ] you still need it.
+Status key: [x] done in `rag_prod/` (RAG sections) or `sql_prod/` (the text-to-SQL section at the end), [ ] you still need it.
 
 ## Data & indexing
 - [x] Idempotent, incremental ingestion; stale chunk removal
@@ -52,3 +52,22 @@ Status key: [x] done in `rag_prod/`, [ ] you still need it.
 - [ ] Dashboards/alerts: latency p95, error rate, abstain rate, cost per request, groundedness failures
 - [ ] Prompt/model versioning with canary or shadow rollout and rollback
 - [ ] Runbook: "answers got worse" / "provider down" / "index corrupted"
+
+## Text-to-SQL agent (lesson 24, `sql_prod/`)
+- [x] Parser-based guard (allow-list over the tree); the re-serialised statement is the one that runs
+- [x] Per-role table AND column policy enforced by the database (authorizer here; GRANTs/RLS in Postgres)
+- [x] Model sees only the schema its role may read; unknown role or no identity = no access
+- [x] Statement timeout, value-size limit, row cap applied as rows leave the database
+- [x] Error classification: permission/timeout/size/constraint are final; only real SQL errors are repaired
+- [x] Writes: rolled-back preview, row limit, foreign keys on, human approval, drift check in one transaction
+- [x] Approval needs a different authorised person, inside a window, for the exact statement; runs under the requester's privileges
+- [x] Append-only audit log (metadata, never rows); every graph path ends in one audit node
+- [x] Per-connection-per-operation database access; per-user rate limit; durable approvals; ownership checks (404)
+- [x] Evals: execution accuracy, safety (DB hash + audit), access with leak count = 0, write gating incl. drift
+- [ ] Row-level security / tenant isolation (the policy is per role, not per row)
+- [ ] PII masking of allowed columns; DLP on answers
+- [ ] `EXPLAIN` cost gate; per-user query and token budgets
+- [ ] Postgres: role per policy, `default_transaction_read_only`, pool, `PostgresSaver`, audit in a separate store
+- [ ] Approval worklist, notifications, expiry sweeper, escalation
+- [ ] OIDC/JWT instead of demo API keys; secrets manager
+- [ ] Red-team suite against the parser guard (fuzzing), run in CI

@@ -74,3 +74,7 @@ Honest caveat: the offline writer is a double, so these numbers prove the **rail
 3. Raise `MAX_WRITE_ROWS`, add a case that touches 6 rows, and watch the safety eval catch the regression.
 4. Add a statement timeout using `sqlite3.Connection.set_progress_handler`.
 5. Swap in a real model and record execution accuracy per question type.
+
+## Next
+
+[Lesson 24](24_production_sql_agent.md) attacks this agent (a comma join reads `sqlite_master`; there is no timeout) and makes it production-shaped: roles and column policy enforced by the database, a parser guard, approval rules, a drift check, an audit trail and an API.

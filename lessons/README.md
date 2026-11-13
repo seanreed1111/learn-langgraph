@@ -29,6 +29,7 @@ tests that prove it, so you can read the behavior as an assertion.
 | 21 LangSmith tracing | `python lessons/21_langsmith_tracing.py` | `test_langsmith_lessons.py`, `test_smoke.py` |
 | 22 LangSmith evaluation | `python lessons/22_langsmith_evaluation.py` | `test_langsmith_lessons.py`, `test_smoke.py` |
 | 23 LangSmith production loop | `python lessons/23_langsmith_production_loop.py` | `test_langsmith_lessons.py`, `test_smoke.py` |
+| 24 Production SQL agent | `python -m sql_prod.cli "Cancel order 6" --user sam --approve-as maya --audit`; `uvicorn sql_prod.api:app` | `test_sql_prod.py`, `test_smoke.py` (CLI, eval gate) |
 | ★ Capstone | `python capstone/support_agent.py` | `test_graphs.py::test_capstone_approval_gate`, `test_smoke.py` |
 
 `common.py`, `offline_llm.py`, `trace_tools.py` (fake LangSmith server, run recorder, mini experiment harness) and `demo_agent.py` (the deterministic agent for lessons 21-23) are shared helpers (scripted fake chat model, offline embeddings); the model

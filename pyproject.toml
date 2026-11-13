@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "learn-langgraph"
 version = "0.1.0"
-description = "LangGraph zero-to-hero lessons + production-style agentic RAG, hierarchical RAG and SQL agent apps"
+description = "LangGraph zero-to-hero lessons + production-style agentic RAG, hierarchical RAG, SQL agent and production SQL agent apps"
 requires-python = ">=3.12"
 # Exact pins, verified working together on 2026-11-12 (latest releases on PyPI that day).
 # Lesson 19 pins LangGraph behavior, so upgrade deliberately: bump, run `hatch run test`, read failures.
@@ -22,6 +22,7 @@ dependencies = [
   "pydantic==2.14.3",
   "fastapi==0.162.5",
   "uvicorn==0.54.0",
+  "sqlglot==30.31.0",   # lesson 24: parser-based SQL guard (latest on PyPI, 2026-11-12)
 ]
 
 [project.optional-dependencies]
@@ -37,7 +38,7 @@ openai = ["langchain-openai==1.7.4"]   # real embeddings (Anthropic has no embed
 postgres = ["langgraph-checkpoint-postgres==3.2.0", "psycopg[binary,pool]==3.3.9"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["rag_prod", "westeros_rag", "sql_agent"]
+packages = ["rag_prod", "westeros_rag", "sql_agent", "sql_prod"]
 
 # ---------------------------------------------------------------- hatch environments
 [tool.hatch.envs.default]
@@ -59,7 +60,7 @@ markers = ["live: calls a real LLM provider (opt-in: needs ANTHROPIC_API_KEY; ru
 addopts = "-m 'not live'"
 
 [tool.coverage.run]
-source = ["rag_prod", "westeros_rag", "sql_agent", "lessons", "capstone"]
+source = ["rag_prod", "westeros_rag", "sql_agent", "sql_prod", "lessons", "capstone"]
 branch = true
 
 [tool.coverage.report]
@@ -71,7 +72,7 @@ exclude_also = ["if __name__ == .__main__.:"]
 [tool.ruff]
 line-length = 110
 target-version = "py312"
-extend-exclude = [".rag_index", ".westeros_index"]
+extend-exclude = [".rag_index", ".westeros_index", ".sql_prod"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
@@ -79,7 +80,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 ignore = ["E501", "RUF001", "RUF002", "RUF003"]   # RUF00x: lessons deliberately use unicode arrows/dashes
 
 [tool.ruff.lint.isort]
-known-first-party = ["rag_prod", "westeros_rag", "sql_agent"]
+known-first-party = ["rag_prod", "westeros_rag", "sql_agent", "sql_prod"]
 
 # ---------------------------------------------------------------- ty (Astral) - strictest settings
 # Every rule is an error (`all` is ty's wildcard) and the strict analysis switches are on.
@@ -89,7 +90,7 @@ python-version = "3.12"
 extra-paths = ["lessons"]              # lessons/common.py + offline_llm.py are put on sys.path at runtime
 
 [tool.ty.src]
-include = ["rag_prod", "westeros_rag", "sql_agent", "lessons", "capstone", "tests"]
+include = ["rag_prod", "westeros_rag", "sql_agent", "sql_prod", "lessons", "capstone", "tests"]
 
 [tool.ty.analysis]
 allowed-unresolved-imports = ["langchain_openai"]   # optional extra: pip install -e ".[openai]"

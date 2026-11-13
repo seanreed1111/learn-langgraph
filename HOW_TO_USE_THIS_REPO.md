@@ -11,7 +11,7 @@ full lesson plans (objectives, exercises, check-your-understanding questions); t
 - [How to work through a lesson](#how-to-work-through-a-lesson)
 - [Which path should I take?](#which-path-should-i-take)
 - [Offline by default, real model on demand](#offline-by-default-real-model-on-demand)
-- [Running the three apps](#running-the-three-apps)
+- [Running the four apps](#running-the-four-apps)
 - [Visualizing and debugging graphs](#visualizing-and-debugging-graphs)
 - [Running the checks](#running-the-checks)
 - [Making changes safely](#making-changes-safely)
@@ -24,7 +24,7 @@ full lesson plans (objectives, exercises, check-your-understanding questions); t
 |---|---|
 | Learn the concepts in order | `lessons/` (run each file) and the lesson plans in the [README](README.md#curriculum-at-a-glance) |
 | See which test proves which lesson | [`lessons/README.md`](lessons/README.md) |
-| Study a production-style service | `rag_prod/` (lesson 14), `westeros_rag/` (lesson 15), `sql_agent/` (lesson 20) |
+| Study a production-style service | `rag_prod/` (lesson 14), `westeros_rag/` (lesson 15), `sql_agent/` (lesson 20), `sql_prod/` (lesson 24) |
 | Build something end to end | `capstone/support_agent.py` |
 | Prepare for interviews | [`INTERVIEW.md`](INTERVIEW.md) |
 | Trace, evaluate and monitor an agent | lessons 21-23 (LangSmith track; offline, no account needed) |
@@ -33,7 +33,7 @@ full lesson plans (objectives, exercises, check-your-understanding questions); t
 | Change the code or upgrade dependencies | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 
 Lessons 01-12, 16-18 and 21-23 are single Python files: the explanation is in the docstring, the code runs, and
-exercises sit at the bottom. Lessons 13-15, 19 and 20 are bigger: a narrative plus runnable code.
+exercises sit at the bottom. Lessons 13-15, 19, 20 and 24 are bigger: a narrative plus runnable code.
 
 ## Set up in five minutes
 
@@ -78,10 +78,10 @@ Prerequisites are cumulative, except Track D (lessons 16-19), which you can take
 | Goal | Path |
 |---|---|
 | **From scratch, three weeks** | Week 1: lessons 01-05 (do every exercise, re-type 05 from memory). Week 2: 06-10 with a real model for 05, 06 and 08. Week 3: 11-12, the capstone, then `INTERVIEW.md`. |
-| **Two more weeks to "advanced"** | Week 4: RAG, lessons 13-15 (run the evals, read an ablation table). Week 5: lessons 16-19, then 20, then the LangSmith track (21-23). |
+| **Two more weeks to "advanced"** | Week 4: RAG, lessons 13-15 (run the evals, read an ablation table). Week 5: lessons 16-19, then 20 and 24, then the LangSmith track (21-23). |
 | **Interview in a week** | Lessons 05, 08, 07, 17, 18, 19, then `INTERVIEW.md` and its whiteboard drills. |
 | **I only need to ship an agent** | 05, 07, 08, 12, then the capstone and `PRODUCTION_CHECKLIST.md`. |
-| **I already know LangGraph** | Skim 17-19 for durable execution, the Pregel runtime and the gotchas, then read `rag_prod/` and `sql_agent/` as reference designs. |
+| **I already know LangGraph** | Skim 17-19 for durable execution, the Pregel runtime and the gotchas, then read `rag_prod/` and `sql_prod/` as reference designs. |
 
 ## Offline by default, real model on demand
 
@@ -107,9 +107,9 @@ nondeterministic output, real cost, and failure modes the fakes cannot produce. 
 [`docs/real-models.md`](docs/real-models.md) before you start spending money, and turn on tracing
 (`LANGSMITH_TRACING=true` plus a key) to watch the calls.
 
-## Running the three apps
+## Running the four apps
 
-All three run offline out of the box.
+All four run offline out of the box.
 
 ### Lesson 14: production RAG (`rag_prod/`)
 
@@ -154,11 +154,32 @@ python -m sql_agent.evals.run_evals                       # quality + safety gat
 
 Each run uses a fresh temporary demo database, so you cannot damage anything.
 
+### Lesson 24: production SQL agent (`sql_prod/`)
+
+```powershell
+python -m sql_prod.cli "What are the customer emails?" --user anna     # refused: analysts cannot read email
+python -m sql_prod.cli "What are the customer emails?" --user sam      # answered: support can
+python -m sql_prod.cli "Cancel order 6" --user sam                     # asks for approval; changes nothing
+python -m sql_prod.cli "Cancel order 6" --user sam --approve-as maya --audit   # a different manager approves; prints the audit trail
+python -m sql_prod.cli "Cancel order 6" --user sam --approve-as sam    # cancelled: you cannot approve your own request
+python -m sql_prod.evals.run_evals                                     # four suites; exit code 1 on regression or any leak
+uvicorn sql_prod.api:app --port 8001                                   # the API
+```
+
+```powershell
+curl.exe -s localhost:8001/ask -H "X-API-Key: key-sam" -H "content-type: application/json" `
+  -d '{\"question\": \"Cancel order 6\"}'
+```
+
+The demo users are `vera` (viewer), `anna` (analyst), `sam` (support), `maya` and `omar` (managers); API keys are `key-<name>`.
+A write returns `pending_approval` with a `query_id` and `sql_sha256`; a *different* manager sends
+`POST /queries/<query_id>/decision` with `{"approve": true, "sql_sha256": "..."}`. Managers can read `/audit`.
+
 ## Visualizing and debugging graphs
 
 - **Print the diagram.** Every compiled graph can draw itself: `print(graph.get_graph().draw_mermaid())`, then
   paste it into <https://mermaid.live>.
-- **LangGraph Studio.** `langgraph.json` registers three graphs (`rag`, `westeros`, `sql`). With the LangGraph
+- **LangGraph Studio.** `langgraph.json` registers four graphs (`rag`, `westeros`, `sql`, `sql_prod`). With the LangGraph
   CLI installed, `langgraph dev` opens them in Studio so you can step through nodes and edit state.
 - **Inspect state.** With a checkpointer, `graph.get_state(config)` and `graph.get_state_history(config)` show
   every step (lesson 07). This is the fastest way to debug a graph that took the wrong branch.

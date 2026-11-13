@@ -1,4 +1,4 @@
-# Local run of the RAG API: `docker compose up --build`  ->  http://localhost:8000/docs
+# Local run: `docker compose up --build`  ->  RAG API http://localhost:8000/docs, SQL analyst http://localhost:8001/docs
 # Keys come from your shell / .env (never from the image). Without a key the API runs offline.
 services:
   rag-api:
@@ -9,5 +9,18 @@ services:
         required: false
     volumes:
       - rag-index:/app/.rag_index
+  sql-api:
+    build: .
+    command: ["uvicorn", "sql_prod.api:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports: ["8001:8001"]
+    env_file:
+      - path: .env
+        required: false
+    healthcheck:   # the image's built-in check probes port 8000
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/readyz')"]
+      interval: 30s
+    volumes:
+      - sql-state:/app/.sql_prod
 volumes:
   rag-index:
+  sql-state:

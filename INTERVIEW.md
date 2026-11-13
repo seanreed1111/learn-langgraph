@@ -35,7 +35,7 @@ Answer each out loud in 60-90 seconds, then check the lesson noted.
 22. **Multi-agent: when and why not?** Supervisor/handoff patterns; cost, latency, debuggability; start with one agent. (11)
 23. **Security?** Prompt injection via tool outputs, least-privilege tools, approval gates for destructive actions, input validation, PII redaction, per-user namespaces/context.
 
-## Advanced (lessons 16-20)
+## Advanced (lessons 16-20, 24)
 24. **Graph API or Functional API?** Graph: explicit topology, shared typed state with reducers, Studio diagrams, many branches. Functional: wrap existing code, data-dependent loops, less ceremony. Same persistence/HITL/streaming; they compose. (16)
 25. **What is the replay rule in the Functional API?** The entrypoint re-executes on resume; `@task` results are replayed from the checkpoint. So side effects and non-determinism (time, uuid, random, HTTP) go inside tasks. (16)
 26. **A run crashed halfway. What happens on resume?** `invoke(None, same thread_id)` continues from the last checkpoint; branches that already finished in the failed super-step are restored from pending writes; the failed node re-runs from its top, so its side effects must be idempotent. (17)
@@ -47,6 +47,7 @@ Answer each out loud in 60-90 seconds, then check the lesson noted.
 32. **What are the common silent failures in LangGraph?** In-place state mutation (checkpoint diverges), typo'd update keys dropped, router typos ending the run with only a log warning, fan-in via separate edges firing twice, `Command(goto)` plus a static edge running both, `try/except` swallowing `interrupt()`, fresh input on a paused thread replacing the request being approved. (19)
 33. **How do you stop an agent from reading another user's data?** Never let the model supply identity: inject user/tenant from trusted runtime context (`ToolRuntime`), namespace `thread_id` by authenticated user, 404 on foreign threads. (19)
 34. **What is the default recursion limit and why does it matter?** 10007 super-steps in 1.2 (old docs say 25): set your own and keep a budget in state. (19)
+35. **Your SQL agent's guard is a regex. What would you change before production?** Parse (sqlglot) and allow-list the tree, run the re-serialised statement, then enforce below the app: per-role table/column policy in the database (grants or an authorizer), statement timeout, value-size limit, row cap as rows leave the DB; approval by a different authorised person, in a window, for the exact statement (fingerprint), applied in one transaction with a row-count drift check; append-only audit of metadata. Prove the gates can fail with mutation tests. (24)
 
 ## Whiteboard drills (do without looking)
 - Draw and code the ReAct loop (lesson 05) in 10 minutes.

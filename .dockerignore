@@ -15,6 +15,7 @@ __pycache__/
 .rag_index/
 .westeros_index/
 .sql_demo.sqlite
+.sql_prod/
 tests/
 docs/
 *.md

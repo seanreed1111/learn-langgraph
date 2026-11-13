@@ -77,6 +77,6 @@ def test_readme_toc_links_all_resolve_to_headings():
 
 def test_every_lesson_plan_is_inline_in_the_readme():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
-    for n in range(1, 24):
+    for n in range(1, 25):
         assert re.search(rf"^### Lesson {n:02d}: ", text, flags=re.M), f"lesson {n:02d} plan missing from README"
     assert re.search(r"^## Capstone: ", text, flags=re.M)

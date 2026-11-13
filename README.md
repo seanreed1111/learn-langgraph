@@ -1,7 +1,7 @@
 # LangGraph: Zero to Hero
 
-A hands-on, runnable path from "what's a graph?" to production-grade agents: 23 lessons, a capstone, three
-production-style apps (RAG, hierarchical RAG, SQL agent), an offline test suite with CI, and an interview guide.
+A hands-on, runnable path from "what's a graph?" to production-grade agents: 24 lessons, a capstone, four
+production-style apps (RAG, hierarchical RAG, SQL agent, production SQL agent), an offline test suite with CI, and an interview guide.
 
 Everything runs **offline by default** (scripted fake LLMs and deterministic test doubles). Add an API key
 to `.env` and the same code uses a real model (see [Using a real model](docs/real-models.md)).
@@ -39,8 +39,9 @@ the tests on Python 3.12, 3.13 and 3.14 on manual trigger only; the project requ
   - [Lesson 17: Durable execution](#lesson-17-durable-execution)
   - [Lesson 18: The Pregel runtime](#lesson-18-the-pregel-runtime)
   - [Lesson 19: Gotchas and anti-patterns](#lesson-19-gotchas-and-anti-patterns)
-- [Track E: Tool-using agents against real systems (20)](#track-e-tool-using-agents-against-real-systems-20)
+- [Track E: Tool-using agents against real systems (20, 24)](#track-e-tool-using-agents-against-real-systems-20-24)
   - [Lesson 20: A safe SQL agent](#lesson-20-a-safe-sql-agent)
+  - [Lesson 24: Production SQL agent](#lesson-24-production-sql-agent)
 - [Track F: LangSmith with LangGraph (21-23)](#track-f-langsmith-with-langgraph-21-23)
   - [Lesson 21: LangSmith tracing for LangGraph](#lesson-21-langsmith-tracing-for-langgraph)
   - [Lesson 22: Evaluating a LangGraph agent with LangSmith](#lesson-22-evaluating-a-langgraph-agent-with-langsmith)
@@ -62,7 +63,7 @@ the tests on Python 3.12, 3.13 and 3.14 on manual trigger only; the project requ
 
 - **Lessons 01-12 and 16-18 are single Python files.** The explanation is in the docstring, the code runs, and
   most have exercises at the bottom. Read the docstring, run it, change something, break it.
-- **Lessons 13-15, 19 and 20 are bigger.** 13 is the official tutorial as one file; 14, 15 and 20 are a
+- **Lessons 13-15, 19, 20 and 24 are bigger.** 13 is the official tutorial as one file; 14, 15, 20 and 24 are a
   narrative (`.md`) plus a real package you can run, test and extend; 19 is a narrative plus a runnable proof file.
 - **Every lesson below has the same lesson plan:** prerequisites, an overview, learning objectives, the
   concepts covered, a walkthrough of what is in the files, how to run it and what you should see, common
@@ -122,6 +123,7 @@ use the project scripts instead: `hatch run test`, `hatch run check` (lint + typ
 | 21 | [LangSmith tracing](#lesson-21-langsmith-tracing-for-langgraph) | Run trees, tags/metadata, `@traceable`, redaction | Observability |
 | 22 | [LangSmith evaluation](#lesson-22-evaluating-a-langgraph-agent-with-langsmith) | Datasets, evaluators, trajectory checks, CI gate | "How do you test agents?" |
 | 23 | [LangSmith production loop](#lesson-23-the-langsmith-production-loop) | Feedback, failures to datasets, cost per release | Operating agents |
+| 24 | [Production SQL agent](#lesson-24-production-sql-agent) | Parser guard, DB-enforced policy, approval rules, drift check, audit, API | What "senior" looks like for tools |
 | ★ | [Capstone](#capstone-support-agent-with-approval-gate) | Everything together | Portfolio piece |
 
 ---
@@ -1192,7 +1194,7 @@ a millisecond. A final checklist is meant for code review.
 
 ---
 
-## Track E: Tool-using agents against real systems (20)
+## Track E: Tool-using agents against real systems (20, 24)
 
 ### Lesson 20: A safe SQL agent
 
@@ -1252,6 +1254,82 @@ the database; running the preview without rolling back; running the write in the
 4. It hashes a dump of the whole database before and after each prompt and requires the hashes to match, rather than trusting the status field.
 5. The steps are always the same, so a graph is cheaper, faster and testable, and the dangerous decision is a node you control. A loop is better when the set of steps is unknown, such as open-ended research or debugging.
 6. A cap of two repairs. After that the run ends with status `failed` and an explanatory message, instead of looping.
+</details>
+
+---
+
+### Lesson 24: Production SQL agent
+
+**Narrative:** [`lessons/24_production_sql_agent.md`](lessons/24_production_sql_agent.md) · **Code:** [`sql_prod/`](sql_prod) ·
+**Tests:** `tests/test_sql_prod.py` · **Prerequisites:** lesson 20 (this is its production version, as 14 is for 13); 14 for the
+evals and API patterns.
+
+**Overview.** Lesson 20 gives you a SQL agent that cannot `DROP TABLE`. This lesson answers the next review question: *what breaks
+when twenty colleagues use it against a real database?* It starts by attacking lesson 20's own guard (a comma join reads
+`sqlite_master`, a subquery `LIMIT` hides a missing outer one, a 200 MB blob and an endless recursive query are both allowed), then
+closes each gap and adds what lesson 20 never attempted: who is asking, who approves, and what happened.
+
+**Learning objectives.** By the end of this lesson you will be able to:
+1. **Probe** an existing guard for bypasses and **explain** why lexical checks fail (the checker and the database disagree about the text).
+2. **Implement** an allow-list guard over a parse tree and **justify** executing the re-serialised statement instead of the original.
+3. **Express** permissions as data (table and column policy per role) and **enforce** them in the database with an authorizer, so a guard bug cannot leak.
+4. **Bound** a query with a statement timeout, a value-size limit and a row cap applied where rows leave the database, and **explain** why a `LIMIT` rewrite is not a cap.
+5. **Classify** database errors into retry (repair) and final (denied, timeout, too big, constraint), and **prove** the writer is not called again for the final ones.
+6. **Design** an approval that needs a different, authorised person, inside a time window, for the exact statement (fingerprint), and **say whose identity** `interrupt()` code sees after a resume.
+7. **Apply** a write with a drift check in one transaction, under the requester's privileges, and **report** stale data instead of writing it.
+8. **Keep** an append-only audit trail (metadata, never rows) and **place** audit writes correctly around `interrupt()`.
+9. **Serve** the graph with authentication, ownership checks (404, not 403), rate limits and durable approvals.
+10. **Evaluate** with four suites and a leak counter that must be zero, and **prove the gates can fail** with mutation checks.
+
+**Concepts covered:** parser-based guards, parser differentials, policy as data, authorizers/GRANTs, resource limits, error
+classification, four-eyes approval, approval binding, drift checks, least privilege on approval, audit logs, identity from `context`,
+mutation testing of safety layers.
+
+**Lesson walkthrough.** The graph: `guard_input` (validate input, reset per-turn state), `load_schema` (filtered by role),
+`write_query`, `check_query` (parser guard, dry run under the role's authorizer, rolled-back write preview), then `run_query` and
+`answer`, or `approve_write` and `apply_write`, or a terminal (`refuse`, `out_of_scope`, `fail`, `timed_out`, `no_change`,
+`cancelled`); every path ends in `record`, which writes the audit entry. The narrative walks ten decision sections (parser guard,
+database-enforced policy, limits, error classification, approval rules, drift check, typed state, audit, API, evals), then
+real models and a real database, mutation checks, what is still missing, exercises and interview points.
+
+**Run it and what you should see.** `pytest -q tests/test_sql_prod.py` passes; `python -m sql_prod.evals.run_evals` prints
+`reads 1.00 / safety 1.00 / access 1.00 leaks=0 / writes 1.00` and `GATE: PASS`;
+`python -m sql_prod.cli "Cancel order 6" --user sam` shows an approval request and stops, `--approve-as maya --audit` applies it and
+prints the audit trail, and `--approve-as sam` is cancelled; `"What are the customer emails?" --user anna` is refused while `--user sam`
+answers; `uvicorn sql_prod.api:app --port 8001` serves `/ask`, `/queries/{id}`, `/queries/{id}/decision` and `/audit`.
+
+**Common mistakes.** Letting the guard be the only enforcement; capping rows by editing the SQL; retrying every database error with
+the model; treating "approved" as a boolean anyone can send; running the approved write with the approver's privileges; auditing
+before `interrupt()` and recording the event twice; storing result rows in the audit log; returning 403 for ids the caller should not
+know exist.
+
+**Exercises (from the narrative; do at least 1, 3 and 5).**
+1. Add tenant isolation with per-tenant views and ACCESS cases that include a join.
+2. Find a statement the parser guard wrongly allows; confirm the authorizer stops it; fix the guard and add the test.
+3. Mutation-test every layer, then add one mutation of your own and the eval case that catches it.
+4. Add an `EXPLAIN QUERY PLAN` cost gate.
+5. Add an approver worklist (`GET /pending`) and an expiry sweeper.
+6. Mask `email` with `SQLITE_IGNORE` and decide which behaviour is safer for a model reading the result.
+7. Add follow-up question handling and prove the policy still applies to the rewritten question.
+
+**Check your understanding.**
+1. [O1] Why did `SELECT * FROM customers, sqlite_master` pass lesson 20's guard, and what class of bug is that?
+2. [O3] Replace the guard with one that misses unknown tables. Which eval suite fails, and what does the answer tell you?
+3. [O4] Why is `fetchmany(max_rows + 1)` a better row cap than appending `LIMIT`?
+4. [O5] A query is denied by the authorizer. Should the graph ask the model to repair it? Why or why not?
+5. [O6] Name the five conditions for an approval to count, and say which identity the code after `interrupt()` sees.
+6. [O7] Between the preview and the approval, a second pending order appears. What happens, and why is the check inside the transaction?
+7. [O8] Why is `approval_requested` audited in `check_query` and `approval_decided` after the interrupt?
+
+<details><summary>Answers</summary>
+
+1. The guard's table regex only saw the name after `FROM`, so the second table in a comma join was never checked, and the read-only connection allowed any read. A lexical checker and the database disagreed about what the text means (a parser differential).
+2. Nothing fails. The database authorizer still refuses the unlisted table, so the safety and access suites pass. That is defence in depth working: the guard is a friendly error message; the database is the control. (Remove the authorizer and ACCESS fails with `leaks=2`.)
+3. Any SQL spelling can avoid a text rewrite (an inner `LIMIT` made lesson 20's guard skip the outer one). The cap is applied when rows leave the database, so nothing avoids it, and the extra row tells you whether the result was truncated.
+4. No. A permission error is deterministic, so the model cannot fix it by rewriting; retrying wastes calls and invites the model to probe for a way around the policy. Refuse, and log it.
+5. The decision is yes; the approver's role may approve; the approver is not the requester; it is inside the time window; the fingerprint matches the statement that will run. After a resume, `runtime.context` is the context of the **resuming call**, so it is the approver's identity, not the requester's.
+6. The statement would now change 2 rows, not the 1 the approver saw, so `apply_write` rolls back and reports `stale`; nothing changes. The count check and the write must be one transaction (`BEGIN IMMEDIATE`) or the data could change between them.
+7. Code before `interrupt()` runs again when the node resumes, so an event written there would be recorded twice. `check_query` runs once, and the code after the interrupt runs once, after the human answered.
 </details>
 
 ---
@@ -1513,7 +1591,7 @@ provider rejects the next request); no explicit recursion limit.
 
 **Two more weeks to reach "advanced"**
 - **Week 4, RAG:** lessons 13-15. Run the evals, read an ablation table, break the ACL test on purpose.
-- **Week 5, depth:** lessons 16-19, then 20 and the LangSmith track (21-23). Do the lesson 19 exercises on your own graph; run
+- **Week 5, depth:** lessons 16-19, then 20, 24 and the LangSmith track (21-23). Do the lesson 19 exercises on your own graph; run
   `pytest tests/test_gotchas.py` after every dependency upgrade.
 
 **Interview in a week:** 05, 08, 07, 17, 18, 19, then `INTERVIEW.md` and the whiteboard drills.
@@ -1532,17 +1610,18 @@ provider rejects the next request); no explicit recursion limit.
 ## Project layout
 
 ```
-lessons/        01-12, 16-18, 21-23 scripts; 13 tutorial; 14, 15, 19, 20 narratives (.md); 19_gotchas.py; common.py, offline_llm.py, trace_tools.py, demo_agent.py
+lessons/        01-12, 16-18, 21-23 scripts; 13 tutorial; 14, 15, 19, 20, 24 narratives (.md); 19_gotchas.py; common.py, offline_llm.py, trace_tools.py, demo_agent.py
 docs/           lessons/ (per-lesson plans by track), real-models.md
 capstone/       support_agent.py
 rag_prod/       lesson 14 service (ingest, retrieval, graph, api, evals)
 westeros_rag/   lesson 15 pipeline (parse, enrich, index, retrieval, guardrails, graph, cli, api, evals)
 sql_agent/      lesson 20 agent (db, guard, graph, offline/llm writers, cli, evals)
+sql_prod/       lesson 24 service (policy, parser guard, db limits, graph, audit, api, cli, evals)
 data/           blog/ (13), kb/ (14), westeros/ (15, linked documents)
 tests/          offline tests (+ opt-in live tests); conftest.py forces offline mode
 .github/        CI (manual trigger): ruff, ty, pytest + coverage on Python 3.12 / 3.13 / 3.14
-langgraph.json  Studio / `langgraph dev` entries: rag, westeros, sql
-Dockerfile      serves rag_prod (cached dependency layer, non-root); docker-compose.yml runs it locally
+langgraph.json  Studio / `langgraph dev` entries: rag, westeros, sql, sql_prod
+Dockerfile      one image (cached dependency layer, non-root); docker-compose.yml runs rag_prod and sql_prod locally
 ```
 
 Offline doubles live in `lessons/common.py` (scripted chat model) and `lessons/offline_llm.py` (hashing
@@ -1560,17 +1639,19 @@ pytest -q -m live                          # OPT-IN: real model (needs ANTHROPIC
 python -m rag_prod.evals.run_evals         # lesson 14 gate (exit code 1 on failure)
 python -m westeros_rag.evals.run_evals     # lesson 15 gate
 python -m sql_agent.evals.run_evals        # lesson 20 gate
+python -m sql_prod.evals.run_evals         # lesson 24 gate (also fails on any access leak)
 ```
 
 | Test file | Covers |
 |---|---|
 | `tests/test_graphs.py` | lessons 01-12 samples, lesson 13 paths, capstone approval gate |
-| `tests/test_smoke.py` | **every lesson and the capstone run as scripts**, both CLIs, all three eval gates |
+| `tests/test_smoke.py` | **every lesson and the capstone run as scripts**, the CLIs, all four eval gates |
 | `tests/test_model_config.py` | the one place model ids and provider selection live |
 | `tests/test_rag_prod.py` | lesson 14 |
 | `tests/test_westeros.py` | lesson 15 |
 | `tests/test_lessons_16_18.py` | lessons 16-18 |
 | `tests/test_sql_agent.py` | lesson 20 |
+| `tests/test_sql_prod.py` | lesson 24 |
 | `tests/test_gotchas.py` | lesson 19 (pins library behavior) |
 | `tests/test_langsmith_lessons.py` | lessons 21-23 (traces, evals, production loop; offline) |
 | `tests/test_repo_integrity.py` | exact pins match the installed packages; README/doc links resolve |
@@ -1583,7 +1664,7 @@ and `Command[Literal[...]]` patterns are not yet understood by `ty`, so those li
 ## Companion documents
 
 - [`HOW_TO_USE_THIS_REPO.md`](HOW_TO_USE_THIS_REPO.md): the operating manual: setup, workflow, study paths, running the apps, troubleshooting.
-- [`INTERVIEW.md`](INTERVIEW.md): 34 questions and answers with lesson pointers, plus whiteboard drills.
+- [`INTERVIEW.md`](INTERVIEW.md): 35 questions and answers with lesson pointers, plus whiteboard drills.
 - [`PRODUCTION_CHECKLIST.md`](PRODUCTION_CHECKLIST.md): what is done and what remains before shipping.
 - [`docs/real-models.md`](docs/real-models.md): what changes when you leave the offline fakes.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): dev loop, upgrade procedure, how the quality gates fit together.
@@ -1593,7 +1674,7 @@ and `Command[Literal[...]]` patterns are not yet understood by `ty`, so those li
 Build two or three, push to GitHub with a README, tests and a diagram (`graph.get_graph().draw_mermaid()`):
 
 1. **RAG agent with grading and rewrite loop** (lessons 13-15 are the templates).
-2. **SQL analyst agent** with read-only guardrails and approval for writes (lesson 20 is the template).
+2. **SQL analyst agent** with read-only guardrails and approval for writes (lessons 20 and 24 are the templates).
 3. **Supervisor multi-agent research team** (researcher, writer, reviewer) with a critique loop and hard budgets.
 4. **Support/ops agent with HITL**: extend the capstone with a Postgres checkpointer, FastAPI + SSE, LangSmith traces.
 5. **An eval harness**: a dataset of conversations plus assertions on tool calls and outcomes. Few candidates have this; it stands out.

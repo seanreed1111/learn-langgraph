@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 LESSON_FILES = sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "lessons").glob("[0-9][0-9]_*.py"))
 SCRIPTS = [*LESSON_FILES, "capstone/support_agent.py"]
 # Python code that must exist as lessons (guards against a lesson file being renamed or dropped).
-EXPECTED_LESSONS = {f"{n:02d}" for n in [*range(1, 14), 16, 17, 18, 19, 21, 22, 23]}
+EXPECTED_LESSONS = {f"{n:02d}" for n in [*range(1, 14), 16, 17, 18, 19, 21, 22, 23]}  # 14, 15, 20 and 24 are packages + narratives
 
 
 def _run(args: list[str], timeout: int = 180) -> subprocess.CompletedProcess[str]:
@@ -49,12 +49,29 @@ def test_sql_agent_cli_write_needs_approval():
     assert "APPROVAL NEEDED" in done.stdout and "Nothing was changed" in done.stdout
 
 
+def test_sql_prod_cli_read_question_and_role_boundary():
+    done = _run(["-m", "sql_prod.cli", "What are the customer emails?", "--user", "anna"])
+    assert done.returncode == 0, done.stderr[-1500:]
+    assert "STATUS : refused" in done.stdout and "@example.com" not in done.stdout
+
+
+def test_sql_prod_cli_write_needs_a_different_approver():
+    pending = _run(["-m", "sql_prod.cli", "Cancel order 6", "--user", "sam"])
+    assert "APPROVAL NEEDED" in pending.stdout and "Nothing was changed" in pending.stdout
+    approved = _run(["-m", "sql_prod.cli", "Cancel order 6", "--user", "sam", "--approve-as", "maya", "--audit"])
+    assert approved.returncode == 0, approved.stderr[-1500:]
+    assert "STATUS : applied" in approved.stdout and "approval_decided" in approved.stdout
+    self_approved = _run(["-m", "sql_prod.cli", "Cancel order 6", "--user", "sam", "--approve-as", "sam"])
+    assert "STATUS : cancelled" in self_approved.stdout
+
+
 def test_westeros_cli_lint_passes():
     done = _run(["-m", "westeros_rag.cli", "lint"])
     assert done.returncode == 0, done.stderr[-1500:]
 
 
-@pytest.mark.parametrize("module", ["rag_prod.evals.run_evals", "sql_agent.evals.run_evals", "westeros_rag.evals.run_evals"])
+@pytest.mark.parametrize("module", ["rag_prod.evals.run_evals", "sql_agent.evals.run_evals", "sql_prod.evals.run_evals",
+                                    "westeros_rag.evals.run_evals"])
 def test_eval_gates_pass_offline(module: str):
     """The eval runners exit non-zero when a quality threshold regresses: that is the CI gate."""
     done = _run(["-m", module], timeout=300)
